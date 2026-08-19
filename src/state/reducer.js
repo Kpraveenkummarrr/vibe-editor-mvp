@@ -42,6 +42,7 @@ export function reducer(workspace, action) {
         chat: [],
         selectedElement: null,
         buildState: { status: "idle", lastResult: null, lastBuildAt: null },
+        publishState: { status: "idle", url: null, siteId: null, lastPublishedAt: null, error: null },
       };
       return { projects: [...workspace.projects, copy], activeProjectId: copy.id };
     }
@@ -96,15 +97,23 @@ export function reducer(workspace, action) {
       }));
     }
 
+    case "SET_CHAT_MODE": {
+      return mapActiveProject(workspace, activeId, (p) => ({
+        ...p,
+        editorState: { ...p.editorState, chatMode: action.mode },
+      }));
+    }
+
     case "SET_ACTIVE_FILE": {
       return mapActiveProject(workspace, activeId, (p) => ({ ...p, activeFile: action.name }));
     }
 
     case "UPDATE_FILE": {
-      return mapActiveProject(workspace, activeId, (p) => ({
-        ...p,
-        files: { ...p.files, [action.name]: action.content },
-      }));
+      return mapActiveProject(workspace, activeId, (p) =>
+        Object.prototype.hasOwnProperty.call(p.customFiles, action.name)
+          ? { ...p, customFiles: { ...p.customFiles, [action.name]: action.content } }
+          : { ...p, files: { ...p.files, [action.name]: action.content } }
+      );
     }
 
     case "CREATE_CUSTOM_FILE": {
@@ -131,51 +140,89 @@ export function reducer(workspace, action) {
       return mapActiveProject(workspace, activeId, (p) => ({ ...p, chat: [...p.chat, action.message] }));
     }
 
+    case "MARK_MESSAGE_APPLIED": {
+      return mapActiveProject(workspace, activeId, (p) => ({
+        ...p,
+        chat: p.chat.map((m) => (m.id === action.messageId ? { ...m, pendingEdit: null, applied: true } : m)),
+      }));
+    }
+
+    // A "version" is a full snapshot of the site's core files (index.html,
+    // styles.css, script.js) before and after a single edit. Every edit —
+    // whether from the AI (live or local engine) or a manual code save —
+    // goes through one of these two cases, so Version History always has a
+    // complete, restorable timeline (see RESTORE_VERSION below).
     case "APPLY_AI_EDIT": {
       return mapActiveProject(workspace, activeId, (p) => {
-        const snapshotBefore = { html: p.files["index.html"], css: p.files["styles.css"] };
+        const snapshotBefore = { ...p.files };
+        const nextFiles = { ...p.files, "index.html": action.files.html, "styles.css": action.files.css };
         const change = {
           id: nextId("chg"),
           summary: action.summary,
           timestamp: Date.now(),
           snapshotBefore,
+          snapshotAfter: nextFiles,
         };
-        return {
-          ...p,
-          files: { ...p.files, "index.html": action.files.html, "styles.css": action.files.css },
-          changes: [change, ...p.changes],
-        };
+        return { ...p, files: nextFiles, changes: [change, ...p.changes] };
       });
     }
 
-    case "MANUAL_CHECKPOINT": {
+    case "COMMIT_FILE_EDIT": {
       return mapActiveProject(workspace, activeId, (p) => {
+        const snapshotBefore = { ...p.files };
+        const nextFiles = { ...p.files, [action.name]: action.content };
         const change = {
           id: nextId("chg"),
           summary: action.summary,
           timestamp: Date.now(),
-          snapshotBefore: action.snapshotBefore,
+          snapshotBefore,
+          snapshotAfter: nextFiles,
         };
-        return { ...p, changes: [change, ...p.changes] };
+        return { ...p, files: nextFiles, changes: [change, ...p.changes] };
       });
     }
 
-    case "REVERT_CHANGE": {
+    // Restoring is non-destructive (like a git revert, not a hard reset):
+    // it copies the target version's files back to HEAD and records that
+    // as a *new* checkpoint, so the full history — including the version
+    // being restored from — is always still there afterward.
+    case "RESTORE_VERSION": {
       return mapActiveProject(workspace, activeId, (p) => {
-        const index = p.changes.findIndex((c) => c.id === action.changeId);
-        if (index === -1) return p;
-        const change = p.changes[index];
-        const remaining = p.changes.slice(index + 1);
-        return {
-          ...p,
-          files: {
-            ...p.files,
-            "index.html": change.snapshotBefore.html,
-            "styles.css": change.snapshotBefore.css,
-          },
-          changes: remaining,
+        const target = p.changes.find((c) => c.id === action.changeId);
+        if (!target) return p;
+        const snapshotBefore = { ...p.files };
+        const nextFiles = { ...target.snapshotAfter };
+        const unchanged = Object.keys(nextFiles).every((k) => nextFiles[k] === snapshotBefore[k]);
+        if (unchanged) return p;
+        const change = {
+          id: nextId("chg"),
+          summary: `Restored version: ${target.summary}`,
+          timestamp: Date.now(),
+          snapshotBefore,
+          snapshotAfter: nextFiles,
         };
+        return { ...p, files: nextFiles, changes: [change, ...p.changes] };
       });
+    }
+
+    case "PUBLISH_START": {
+      return mapActiveProject(workspace, activeId, (p) => ({
+        ...p,
+        publishState: { ...p.publishState, status: "publishing", error: null },
+      }));
+    }
+
+    case "PUBLISH_RESULT": {
+      return mapActiveProject(workspace, activeId, (p) => ({
+        ...p,
+        publishState: {
+          status: action.status,
+          url: action.url || p.publishState.url,
+          siteId: action.siteId || p.publishState.siteId,
+          lastPublishedAt: action.status === "success" ? Date.now() : p.publishState.lastPublishedAt,
+          error: action.error || null,
+        },
+      }));
     }
 
     case "BUILD_START": {

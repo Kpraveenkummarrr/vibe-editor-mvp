@@ -7,12 +7,20 @@ import { loadWorkspace, saveWorkspace } from "../utils/storage.js";
 import { processPrompt } from "../ai/engine.js";
 import { validateProject } from "../utils/validateHtml.js";
 import { buildStandaloneHtml } from "../utils/download.js";
+import { requestPublish } from "../utils/publish.js";
 import { nextId } from "../utils/id.js";
 
 const ProjectStateContext = createContext(null);
 
 function init() {
-  return loadWorkspace() || createInitialWorkspace();
+  const workspace = loadWorkspace() || createInitialWorkspace();
+  return {
+    ...workspace,
+    projects: workspace.projects.map((project) => ({
+      ...project,
+      editorState: { ...project.editorState, rightTab: "preview" },
+    })),
+  };
 }
 
 export function ProjectProvider({ children }) {
@@ -42,6 +50,8 @@ export function ProjectProvider({ children }) {
       dispatch({ type: "ADD_CHAT_MESSAGE", message: userMessage });
       setIsThinking(true);
 
+      const planOnly = project.editorState.chatMode === "plan";
+
       try {
         const result = await processPrompt({
           prompt: text,
@@ -52,13 +62,16 @@ export function ProjectProvider({ children }) {
         const aiMessage = {
           id: nextId("msg"),
           role: "ai",
-          text: result.reply,
+          text: planOnly && result.files ? `Plan: ${result.reply}` : result.reply,
           status: result.files ? "success" : "info",
+          source: result.source,
           timestamp: Date.now(),
+          pendingEdit: planOnly && result.files ? { files: result.files, summary: result.summary } : null,
+          applied: false,
         };
         dispatch({ type: "ADD_CHAT_MESSAGE", message: aiMessage });
 
-        if (result.files) {
+        if (result.files && !planOnly) {
           dispatch({ type: "APPLY_AI_EDIT", files: result.files, summary: result.summary });
         }
       } catch (err) {
@@ -76,18 +89,23 @@ export function ProjectProvider({ children }) {
         setIsThinking(false);
       }
     },
-    [project.files, project.selectedElement]
+    [project.files, project.selectedElement, project.editorState.chatMode]
   );
 
+  const applyPendingEdit = useCallback((messageId) => {
+    const message = project.chat.find((m) => m.id === messageId);
+    if (!message?.pendingEdit) return;
+    dispatch({ type: "APPLY_AI_EDIT", files: message.pendingEdit.files, summary: message.pendingEdit.summary });
+    dispatch({ type: "MARK_MESSAGE_APPLIED", messageId });
+  }, [project.chat]);
+
   const updateFile = useCallback((name, content, checkpointSummary) => {
-    if (checkpointSummary) {
-      dispatch({
-        type: "MANUAL_CHECKPOINT",
-        summary: checkpointSummary,
-        snapshotBefore: { html: project.files["index.html"], css: project.files["styles.css"] },
-      });
+    const isCoreFile = Object.prototype.hasOwnProperty.call(project.files, name);
+    if (checkpointSummary && isCoreFile) {
+      dispatch({ type: "COMMIT_FILE_EDIT", name, content, summary: checkpointSummary });
+    } else {
+      dispatch({ type: "UPDATE_FILE", name, content });
     }
-    dispatch({ type: "UPDATE_FILE", name, content });
   }, [project.files]);
 
   const runBuild = useCallback(() => {
@@ -122,6 +140,41 @@ export function ProjectProvider({ children }) {
     }, 700);
   }, [project.files, project.name]);
 
+  const runPublish = useCallback(async () => {
+    dispatch({ type: "PUBLISH_START" });
+
+    const buildIssues = validateProject({
+      html: project.files["index.html"],
+      css: project.files["styles.css"],
+    });
+    if (buildIssues.some((i) => i.severity === "error")) {
+      dispatch({ type: "PUBLISH_RESULT", status: "error", error: "fix_issues_first" });
+      return;
+    }
+
+    const html = buildStandaloneHtml(
+      {
+        html: project.files["index.html"],
+        css: project.files["styles.css"],
+        js: project.files["script.js"],
+      },
+      project.name
+    );
+
+    const result = await requestPublish({
+      projectName: project.name,
+      siteId: project.publishState.siteId,
+      html,
+    });
+
+    if (!result.ok) {
+      dispatch({ type: "PUBLISH_RESULT", status: "error", error: result.error || "publish_failed" });
+      return;
+    }
+
+    dispatch({ type: "PUBLISH_RESULT", status: "success", url: result.url, siteId: result.siteId });
+  }, [project.files, project.name, project.publishState.siteId]);
+
   const value = useMemo(
     () => ({
       workspace,
@@ -130,10 +183,12 @@ export function ProjectProvider({ children }) {
       isThinking,
       dispatch,
       sendMessage,
+      applyPendingEdit,
       updateFile,
       runBuild,
+      runPublish,
     }),
-    [workspace, project, issues, isThinking, sendMessage, updateFile, runBuild]
+    [workspace, project, issues, isThinking, sendMessage, applyPendingEdit, updateFile, runBuild, runPublish]
   );
 
   return <ProjectStateContext.Provider value={value}>{children}</ProjectStateContext.Provider>;

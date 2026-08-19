@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useProject } from "../state/ProjectContext.jsx";
 import { annotateForPreview } from "../utils/domIds.js";
-import { SegmentedControl } from "./ui/Primitives.jsx";
 
 const VIEWPORTS = [
   { value: "desktop", label: "Desktop", width: "100%" },
-  { value: "tablet", label: "Tablet", width: "834px" },
+  { value: "tablet", label: "Tablet", width: "768px" },
   { value: "mobile", label: "Mobile", width: "390px" },
 ];
 
@@ -50,8 +49,8 @@ const INJECTED_SCRIPT = `
 `;
 
 const SELECTION_STYLES = `
-html.vibe-edit-mode [data-vibe-id]:hover { outline: 2px dashed #6366f1; outline-offset: 2px; cursor: pointer; }
-.vibe-selected { outline: 2px solid #6366f1 !important; outline-offset: 2px; }
+html.vibe-edit-mode [data-vibe-id]:hover { outline: 2px dashed #4f78ff; outline-offset: 2px; cursor: pointer; }
+.vibe-selected { outline: 2px solid #4f78ff !important; outline-offset: 2px; }
 `;
 
 function buildSrcDoc(files, mode) {
@@ -104,33 +103,19 @@ export default function PreviewWorkspace() {
     return () => window.removeEventListener("message", onMessage);
   }, [dispatch, project.selectedElement]);
 
+  useEffect(() => {
+    iframeRef.current?.contentWindow?.postMessage(
+      { type: "vibe-set-selection", vibeId: project.selectedElement?.vibeId || null },
+      "*"
+    );
+  }, [project.selectedElement]);
+
   const activeViewport = VIEWPORTS.find((v) => v.value === viewport) || VIEWPORTS[0];
 
   return (
     <div className="preview-workspace">
-      <div className="preview-workspace__toolbar">
-        <SegmentedControl
-          ariaLabel="Edit or preview mode"
-          value={mode}
-          onChange={(m) => dispatch({ type: "SET_MODE", mode: m })}
-          options={[
-            { value: "edit", label: "Edit" },
-            { value: "preview", label: "Preview" },
-          ]}
-        />
-        <SegmentedControl
-          ariaLabel="Viewport size"
-          value={viewport}
-          onChange={(v) => dispatch({ type: "SET_VIEWPORT", viewport: v })}
-          options={VIEWPORTS.map((v) => ({ value: v.value, label: v.label }))}
-        />
-        <span className="preview-workspace__status">
-          {isThinking ? "Updating preview…" : `${activeViewport.width === "100%" ? "Fluid" : activeViewport.width} width`}
-        </span>
-      </div>
-
       <div className="preview-workspace__canvas">
-        <div className="preview-workspace__frame-wrap" style={{ width: activeViewport.width }}>
+        <div className={`preview-workspace__frame-wrap viewport-${activeViewport.value}`} style={{ width: activeViewport.width }}>
           <iframe
             ref={iframeRef}
             title="Site preview"
@@ -138,6 +123,30 @@ export default function PreviewWorkspace() {
             srcDoc={srcDoc}
             sandbox="allow-scripts allow-same-origin"
           />
+        </div>
+        <div className="floating-tools" role="toolbar" aria-label="Preview tools">
+          <button
+            className={`float-tool ${mode === "edit" ? "active" : ""}`}
+            type="button"
+            onClick={() => dispatch({ type: "SET_MODE", mode: "edit" })}
+            aria-label="Edit mode"
+            title="Edit mode"
+          >
+            Edit
+          </button>
+          <button
+            className={`float-tool ${mode === "preview" ? "active" : ""}`}
+            type="button"
+            onClick={() => dispatch({ type: "SET_MODE", mode: "preview" })}
+            aria-label="Preview mode"
+            title="Preview mode"
+          >
+            View
+          </button>
+          <span className="float-sep" />
+          <span className="float-status">
+            {isThinking ? "Updating" : activeViewport.width === "100%" ? "Fluid" : activeViewport.width}
+          </span>
         </div>
       </div>
     </div>

@@ -12,9 +12,10 @@ export function createProject(name = DEFAULT_PROJECT_NAME) {
     customFiles: {},
     activeFile: "index.html",
     selectedElement: null,
-    editorState: { mode: "edit", viewport: "desktop", rightTab: "files" },
+    editorState: { mode: "edit", viewport: "desktop", rightTab: "preview", chatMode: "build" },
     changes: [],
     buildState: { status: "idle", lastResult: null, lastBuildAt: null },
+    publishState: { status: "idle", url: null, siteId: null, lastPublishedAt: null, error: null },
     chat: [],
   };
 }

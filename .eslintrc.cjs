@@ -18,4 +18,10 @@ module.exports = {
     ],
     "react/prop-types": "off",
   },
+  overrides: [
+    {
+      files: ["api/**/*.js", "vite.config.js"],
+      env: { node: true, browser: false },
+    },
+  ],
 };

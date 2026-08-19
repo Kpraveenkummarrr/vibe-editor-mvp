@@ -1,5 +1,5 @@
 import { withMutatedNode, withDocument, parseFragment } from "../utils/domIds.js";
-import { COLOR_WORDS, shadeHex } from "./colors.js";
+import { COLOR_WORDS, shadeHex, setBrandColor, currentBrandColor } from "./colors.js";
 
 function px(value, fallback) {
   const n = parseFloat(value);
@@ -20,22 +20,6 @@ function findTarget(body, selectedVibeId, fallbackSelector) {
   }
   if (fallbackSelector) return body.querySelector(fallbackSelector);
   return null;
-}
-
-function setBrandColor(css, hex, hexDark) {
-  let next = css;
-  if (/--brand\s*:/.test(next)) {
-    next = next.replace(/--brand\s*:\s*#[0-9a-fA-F]{3,6}\s*;/, `--brand: ${hex};`);
-  }
-  if (/--brand-dark\s*:/.test(next)) {
-    next = next.replace(/--brand-dark\s*:\s*#[0-9a-fA-F]{3,6}\s*;/, `--brand-dark: ${hexDark};`);
-  }
-  return next;
-}
-
-function currentBrandColor(css) {
-  const m = css.match(/--brand\s*:\s*(#[0-9a-fA-F]{3,6})\s*;/);
-  return m ? m[1] : "#16a34a";
 }
 
 /**
