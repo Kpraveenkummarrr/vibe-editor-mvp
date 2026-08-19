@@ -1,74 +1,64 @@
-import { useState, useCallback } from "react";
-import Header from "./components/Header.jsx";
-import ChatPanel from "./components/ChatPanel.jsx";
-import CodeEditorPanel from "./components/CodeEditorPanel.jsx";
-import PreviewPanel from "./components/PreviewPanel.jsx";
-import { getAIResponse } from "./mockAI.js";
-import "./App.css";
+import { useState } from "react";
+import { ProjectProvider } from "./state/ProjectContext.jsx";
+import TopBar from "./components/TopBar.jsx";
+import AssistantPanel from "./components/AssistantPanel.jsx";
+import PreviewWorkspace from "./components/PreviewWorkspace.jsx";
+import RightPanel from "./components/RightPanel/RightPanel.jsx";
+import RenameModal from "./components/modals/RenameModal.jsx";
+import ImportExportModal from "./components/modals/ImportExportModal.jsx";
+import BuildModal from "./components/modals/BuildModal.jsx";
+import "./styles/tokens.css";
+import "./styles/app.css";
 
-const INITIAL_CODE = {
-  html: `<div class="hello">
-  <h1>Hello from Vibe Editor</h1>
-  <p>Describe what you want in the chat, and the code will update here.</p>
-</div>`,
-  css: `.hello {
-  font-family: system-ui, sans-serif;
-  text-align: center;
-  margin-top: 60px;
-  color: #1e293b;
-}`,
-  js: `// Your generated JavaScript will appear here.`,
-};
-
-let messageIdCounter = 0;
-function nextId() {
-  messageIdCounter += 1;
-  return messageIdCounter;
-}
-
-export default function App() {
-  const [messages, setMessages] = useState([]);
-  const [code, setCode] = useState(INITIAL_CODE);
-  const [isThinking, setIsThinking] = useState(false);
-
-  const handleSendMessage = useCallback(async (text) => {
-    const userMessage = { id: nextId(), role: "user", text };
-    setMessages((prev) => [...prev, userMessage]);
-    setIsThinking(true);
-
-    try {
-      const { reply, code: newCode } = await getAIResponse(text);
-
-      const aiMessage = { id: nextId(), role: "ai", text: reply };
-      setMessages((prev) => [...prev, aiMessage]);
-
-      if (newCode) {
-        setCode(newCode);
-      }
-    } catch (err) {
-      const errorMessage = {
-        id: nextId(),
-        role: "ai",
-        text: `Sorry, something went wrong generating a response. (${err.message})`,
-      };
-      setMessages((prev) => [...prev, errorMessage]);
-    } finally {
-      setIsThinking(false);
-    }
-  }, []);
+function EditorShell() {
+  const [activeModal, setActiveModal] = useState(null);
+  const [mobilePanel, setMobilePanel] = useState("assistant");
 
   return (
     <div className="app">
-      <Header />
+      <TopBar onOpenModal={setActiveModal} />
+
+      <div className="app__mobile-nav">
+        {[
+          { key: "assistant", label: "Assistant" },
+          { key: "preview", label: "Preview" },
+          { key: "panel", label: "Project" },
+        ].map((item) => (
+          <button
+            key={item.key}
+            className={`app__mobile-nav-item ${mobilePanel === item.key ? "is-active" : ""}`}
+            onClick={() => setMobilePanel(item.key)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+
       <main className="app__body">
-        <ChatPanel
-          messages={messages}
-          onSendMessage={handleSendMessage}
-          isThinking={isThinking}
-        />
-        <CodeEditorPanel code={code} onChangeCode={setCode} />
-        <PreviewPanel code={code} />
+        <div className={`app__center ${mobilePanel !== "panel" ? "" : "app__center--hidden-mobile"}`}>
+          <div className={`app__assistant ${mobilePanel === "preview" ? "app__assistant--hidden-mobile" : ""}`}>
+            <AssistantPanel />
+          </div>
+          <div className={`app__preview ${mobilePanel === "assistant" ? "app__preview--hidden-mobile" : ""}`}>
+            <PreviewWorkspace />
+          </div>
+        </div>
+        <div className={`app__right ${mobilePanel !== "panel" ? "app__right--hidden-mobile" : ""}`}>
+          <RightPanel />
+        </div>
       </main>
+
+      {activeModal === "rename" && <RenameModal onClose={() => setActiveModal(null)} />}
+      {activeModal === "import-export" && <ImportExportModal onClose={() => setActiveModal(null)} />}
+      {activeModal === "build" && <BuildModal onClose={() => setActiveModal(null)} />}
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <ProjectProvider>
+      <EditorShell />
+    </ProjectProvider>
   );
 }
