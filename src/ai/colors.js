@@ -28,3 +28,19 @@ export function shadeHex(hex, percent) {
 export function findColorWord(text) {
   return Object.keys(COLOR_WORDS).find((word) => text.includes(word)) || null;
 }
+
+export function setBrandColor(css, hex, hexDark) {
+  let next = css;
+  if (/--brand\s*:/.test(next)) {
+    next = next.replace(/--brand\s*:\s*#[0-9a-fA-F]{3,6}\s*;/, `--brand: ${hex};`);
+  }
+  if (/--brand-dark\s*:/.test(next)) {
+    next = next.replace(/--brand-dark\s*:\s*#[0-9a-fA-F]{3,6}\s*;/, `--brand-dark: ${hexDark};`);
+  }
+  return next;
+}
+
+export function currentBrandColor(css) {
+  const m = css.match(/--brand\s*:\s*(#[0-9a-fA-F]{3,6})\s*;/);
+  return m ? m[1] : "#16a34a";
+}

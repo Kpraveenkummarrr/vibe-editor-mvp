@@ -10,6 +10,15 @@ function formatTime(ts) {
   return new Date(ts).toLocaleDateString();
 }
 
+function diffSize(change) {
+  if (!change.snapshotBefore || !change.snapshotAfter) return null;
+  const before = Object.values(change.snapshotBefore).join("").length;
+  const after = Object.values(change.snapshotAfter).join("").length;
+  const delta = after - before;
+  if (delta === 0) return null;
+  return delta > 0 ? `+${delta} chars` : `${delta} chars`;
+}
+
 export default function ChangesTab() {
   const { project, dispatch } = useProject();
 
@@ -17,36 +26,44 @@ export default function ChangesTab() {
     return (
       <EmptyState
         icon="🕓"
-        title="No changes yet"
-        description="Checkpoints appear here every time the assistant applies an edit, or you save a manual code change."
+        title="No versions yet"
+        description="Every applied edit — from the assistant or a manual code save — is recorded here as a restorable local version."
       />
     );
   }
 
   return (
-    <ul className="changes-tab__list">
-      {project.changes.map((change, index) => (
-        <li key={change.id} className="changes-tab__item">
-          <div className="changes-tab__item-main">
-            <p className="changes-tab__summary">{change.summary}</p>
-            <p className="changes-tab__meta">
-              {formatTime(change.timestamp)}
-              {index === 0 && <span className="changes-tab__current"> · current</span>}
-            </p>
-          </div>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => {
-              if (window.confirm(`Revert "${change.summary}"? Later checkpoints will be discarded.`)) {
-                dispatch({ type: "REVERT_CHANGE", changeId: change.id });
-              }
-            }}
-          >
-            Revert
-          </Button>
-        </li>
-      ))}
-    </ul>
+    <div className="changes-tab">
+      <p className="changes-tab__intro">
+        Local version history. Restoring a version keeps the full timeline — it never deletes history.
+      </p>
+      <ul className="changes-tab__list">
+        {project.changes.map((change, index) => (
+          <li key={change.id} className="changes-tab__item">
+            <div className="changes-tab__item-main">
+              <p className="changes-tab__summary">{change.summary}</p>
+              <p className="changes-tab__meta">
+                {formatTime(change.timestamp)}
+                {diffSize(change) && <span className="changes-tab__diff"> · {diffSize(change)}</span>}
+                {index === 0 && <span className="changes-tab__current"> · current</span>}
+              </p>
+            </div>
+            {index !== 0 && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  if (window.confirm(`Restore this version ("${change.summary}")? This adds a new checkpoint — nothing is deleted.`)) {
+                    dispatch({ type: "RESTORE_VERSION", changeId: change.id });
+                  }
+                }}
+              >
+                Restore
+              </Button>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }

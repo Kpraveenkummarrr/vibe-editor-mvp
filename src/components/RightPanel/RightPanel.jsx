@@ -8,7 +8,7 @@ import { Badge } from "../ui/Primitives.jsx";
 const TABS = [
   { key: "files", label: "Files" },
   { key: "code", label: "Code" },
-  { key: "changes", label: "Changes" },
+  { key: "changes", label: "History" },
   { key: "issues", label: "Issues" },
 ];
 
