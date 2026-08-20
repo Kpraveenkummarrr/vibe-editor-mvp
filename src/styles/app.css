@@ -1900,6 +1900,17 @@
   color: #8ba3ff;
 }
 
+.publish-modal__detail {
+  margin-top: 4px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #2a1f1f;
+  border: 1px solid #4a2f2f;
+  color: #f0b8b8;
+  font-size: 12px;
+  font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+}
+
 .publish-modal__steps,
 .build-modal__steps {
   margin: 4px 0 2px;

@@ -255,6 +255,7 @@ export function reducer(workspace, action) {
           siteId: action.siteId || p.publishState.siteId,
           lastPublishedAt: action.status === "success" ? Date.now() : p.publishState.lastPublishedAt,
           error: action.error || null,
+          errorDetail: action.status === "error" ? action.detail || null : null,
         },
       }));
     }

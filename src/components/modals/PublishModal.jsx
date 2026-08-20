@@ -9,16 +9,34 @@ import { downloadTextFile, buildStandaloneHtml } from "../../utils/download.js";
 const ERROR_COPY = {
   not_configured: "not_configured",
   fix_issues_first: "Fix the errors in the Issues tab before publishing.",
-  create_site_failed: "Netlify rejected the request to create a site. Check that your token is valid.",
-  deploy_failed: "The deploy to Netlify failed. Check that your token has deploy permissions and try again.",
+  create_site_failed: "Netlify rejected the request to create a site.",
+  deploy_failed: "The deploy to Netlify failed.",
   zip_failed: "Couldn't package the site for deploy. Try again.",
   network_error: "Couldn't reach the publish service — check your connection and try again.",
   request_failed: "The publish request failed. Try again.",
 };
 
+// Netlify's error `detail` is usually JSON like {"error": "..."} or
+// {"message": "..."}, but can also be a raw string or HTML error page —
+// extract whatever's human-readable rather than dumping raw JSON/markup.
+function extractDetailMessage(detail) {
+  if (!detail) return null;
+  try {
+    const parsed = JSON.parse(detail);
+    const msg = parsed?.error?.message || parsed?.error || parsed?.message;
+    if (typeof msg === "string" && msg.trim()) return msg.trim();
+  } catch {
+    // not JSON — fall through to raw text below
+  }
+  const trimmed = detail.trim();
+  if (!trimmed || trimmed.startsWith("<")) return null; // skip HTML error pages
+  return trimmed.slice(0, 240);
+}
+
 export default function PublishModal({ onClose }) {
   const { project, dispatch, runPublish } = useProject();
-  const { status, url, error, lastPublishedAt } = project.publishState;
+  const { status, url, error, errorDetail, lastPublishedAt } = project.publishState;
+  const detailMessage = extractDetailMessage(errorDetail);
   const [configured, setConfigured] = useState(true);
   const [copied, setCopied] = useState(false);
 
@@ -101,7 +119,10 @@ export default function PublishModal({ onClose }) {
                 </ol>
               </>
             ) : (
-              <p>{ERROR_COPY[error] || "Something went wrong publishing this project."}</p>
+              <>
+                <p>{ERROR_COPY[error] || "Something went wrong publishing this project."}</p>
+                {detailMessage && <p className="publish-modal__detail">{detailMessage}</p>}
+              </>
             )}
             <div className="publish-modal__actions">
               {error === "fix_issues_first" ? (

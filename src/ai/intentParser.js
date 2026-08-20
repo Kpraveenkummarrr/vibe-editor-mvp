@@ -48,7 +48,7 @@ export function classifyIntent(promptRaw) {
     return { type: "color_adjust", direction: "lighten", colorWord: findColorWord(prompt) };
   }
   const colorWord = findColorWord(prompt);
-  if (colorWord && /(color|colour|use|make it|change (it|this) to)/.test(prompt)) {
+  if (colorWord && /(color|colour|theme|brand|use|make it|change (it|this|the) to)/.test(prompt)) {
     return { type: "color_set", colorWord };
   }
 

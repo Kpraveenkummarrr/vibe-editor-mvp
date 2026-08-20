@@ -16,7 +16,7 @@ export function createProject(name = DEFAULT_PROJECT_NAME) {
     editorState: { mode: "edit", viewport: "desktop", rightTab: "preview", chatMode: "build" },
     changes: [],
     buildState: { status: "idle", lastResult: null, lastBuildAt: null },
-    publishState: { status: "idle", url: null, siteId: null, lastPublishedAt: null, error: null },
+    publishState: { status: "idle", url: null, siteId: null, lastPublishedAt: null, error: null, errorDetail: null },
     chat: [],
   };
 }
