@@ -226,8 +226,11 @@ export function reducer(workspace, action) {
         if (!target) return p;
         const snapshotBefore = { ...p.files };
         const nextFiles = { ...target.snapshotAfter };
-        const unchanged = Object.keys(nextFiles).every((k) => nextFiles[k] === snapshotBefore[k]);
-        if (unchanged) return p;
+        // No "unchanged, skip" guard here on purpose: even when the restored
+        // content happens to match HEAD byte-for-byte, still record the
+        // checkpoint. Clicking Restore should never be a silent no-op — the
+        // version toast confirming "New version saved" is the user's only
+        // feedback that anything happened.
         const change = {
           id: nextId("chg"),
           summary: `Restored version: ${target.summary}`,
