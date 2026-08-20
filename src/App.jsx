@@ -5,6 +5,8 @@ import AssistantPanel from "./components/AssistantPanel.jsx";
 import PreviewWorkspace from "./components/PreviewWorkspace.jsx";
 import CodeTab from "./components/RightPanel/CodeTab.jsx";
 import FilesTab from "./components/RightPanel/FilesTab.jsx";
+import ChangesTab from "./components/RightPanel/ChangesTab.jsx";
+import IssuesTab from "./components/RightPanel/IssuesTab.jsx";
 import RenameModal from "./components/modals/RenameModal.jsx";
 import ImportExportModal from "./components/modals/ImportExportModal.jsx";
 import BuildModal from "./components/modals/BuildModal.jsx";
@@ -16,7 +18,7 @@ function EditorShell() {
   const { project } = useProject();
   const [activeModal, setActiveModal] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const activeView = ["preview", "code", "files"].includes(project.editorState.rightTab)
+  const activeView = ["preview", "code", "files", "changes", "issues"].includes(project.editorState.rightTab)
     ? project.editorState.rightTab
     : "preview";
 
@@ -35,6 +37,8 @@ function EditorShell() {
           {activeView === "preview" && <PreviewWorkspace />}
           {activeView === "code" && <CodeTab />}
           {activeView === "files" && <FilesTab />}
+          {activeView === "changes" && <ChangesTab />}
+          {activeView === "issues" && <IssuesTab />}
         </section>
       </main>
 

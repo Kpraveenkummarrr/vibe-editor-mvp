@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useProject } from "../state/ProjectContext.jsx";
 import { annotateForPreview } from "../utils/domIds.js";
+import { IconEdit, IconEye } from "./ui/Icons.jsx";
 
 const VIEWPORTS = [
   { value: "desktop", label: "Desktop", width: "100%" },
@@ -132,7 +133,8 @@ export default function PreviewWorkspace() {
             aria-label="Edit mode"
             title="Edit mode"
           >
-            Edit
+            <IconEdit size={13} />
+            <span>Edit</span>
           </button>
           <button
             className={`float-tool ${mode === "preview" ? "active" : ""}`}
@@ -141,7 +143,8 @@ export default function PreviewWorkspace() {
             aria-label="Preview mode"
             title="Preview mode"
           >
-            View
+            <IconEye size={13} />
+            <span>View</span>
           </button>
           <span className="float-sep" />
           <span className="float-status">

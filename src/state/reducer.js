@@ -140,6 +140,10 @@ export function reducer(workspace, action) {
       return mapActiveProject(workspace, activeId, (p) => ({ ...p, chat: [...p.chat, action.message] }));
     }
 
+    case "CLEAR_CHAT": {
+      return mapActiveProject(workspace, activeId, (p) => ({ ...p, chat: [], selectedElement: null }));
+    }
+
     case "MARK_MESSAGE_APPLIED": {
       return mapActiveProject(workspace, activeId, (p) => ({
         ...p,

@@ -33,14 +33,23 @@ export async function processPrompt({ prompt, files, selectedElement }) {
 
 async function tryLiveEdit({ prompt, files, selectedElement }) {
   let response;
+  const controller = new AbortController();
+  // A hung request (slow free-tier model, flaky network/proxy) must never
+  // block the UI forever — without this, isThinking stays true and the
+  // composer looks silently frozen. Fall back to the local engine instead.
+  const timeout = setTimeout(() => controller.abort(), 20000);
+
   try {
     response = await fetch("/api/ai-edit", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ prompt, selectedElement, html: files.html, css: files.css }),
+      signal: controller.signal,
     });
   } catch {
-    return null; // offline / no dev server for /api — fall back silently
+    return null; // offline, timed out, or no dev server for /api — fall back silently
+  } finally {
+    clearTimeout(timeout);
   }
 
   if (!response.ok) return null;

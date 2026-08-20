@@ -22,48 +22,57 @@ function diffSize(change) {
 export default function ChangesTab() {
   const { project, dispatch } = useProject();
 
-  if (project.changes.length === 0) {
-    return (
-      <EmptyState
-        icon="🕓"
-        title="No versions yet"
-        description="Every applied edit — from the assistant or a manual code save — is recorded here as a restorable local version."
-      />
-    );
-  }
-
   return (
     <div className="changes-tab">
-      <p className="changes-tab__intro">
-        Local version history. Restoring a version keeps the full timeline — it never deletes history.
-      </p>
-      <ul className="changes-tab__list">
-        {project.changes.map((change, index) => (
-          <li key={change.id} className="changes-tab__item">
-            <div className="changes-tab__item-main">
-              <p className="changes-tab__summary">{change.summary}</p>
-              <p className="changes-tab__meta">
-                {formatTime(change.timestamp)}
-                {diffSize(change) && <span className="changes-tab__diff"> · {diffSize(change)}</span>}
-                {index === 0 && <span className="changes-tab__current"> · current</span>}
-              </p>
-            </div>
-            {index !== 0 && (
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  if (window.confirm(`Restore this version ("${change.summary}")? This adds a new checkpoint — nothing is deleted.`)) {
-                    dispatch({ type: "RESTORE_VERSION", changeId: change.id });
-                  }
-                }}
-              >
-                Restore
-              </Button>
-            )}
-          </li>
-        ))}
-      </ul>
+      <div className="changes-tab__shell">
+        <div className="changes-tab__head">
+          <div>
+            <div className="files-title">History</div>
+            <div className="files-subtitle">{project.changes.length} saved version{project.changes.length === 1 ? "" : "s"}</div>
+          </div>
+        </div>
+
+        {project.changes.length === 0 ? (
+          <EmptyState
+            icon="🕓"
+            title="No versions yet"
+            description="Every applied edit — from the assistant or a manual code save — is recorded here as a restorable local version."
+          />
+        ) : (
+          <div className="changes-tab__body">
+            <p className="changes-tab__intro">
+              Restoring a version keeps the full timeline — it never deletes history.
+            </p>
+            <ul className="changes-tab__list">
+              {project.changes.map((change, index) => (
+                <li key={change.id} className="changes-tab__item">
+                  <div className="changes-tab__item-main">
+                    <p className="changes-tab__summary">{change.summary}</p>
+                    <p className="changes-tab__meta">
+                      {formatTime(change.timestamp)}
+                      {diffSize(change) && <span className="changes-tab__diff"> · {diffSize(change)}</span>}
+                      {index === 0 && <span className="changes-tab__current"> · current</span>}
+                    </p>
+                  </div>
+                  {index !== 0 && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        if (window.confirm(`Restore this version ("${change.summary}")? This adds a new checkpoint — nothing is deleted.`)) {
+                          dispatch({ type: "RESTORE_VERSION", changeId: change.id });
+                        }
+                      }}
+                    >
+                      Restore
+                    </Button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

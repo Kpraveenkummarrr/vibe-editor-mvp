@@ -87,6 +87,10 @@ export async function publishProject({ token, projectName, siteId, html }, env =
 
   const zip = new JSZip();
   zip.file("index.html", html);
+  // Force the correct Content-Type on Netlify's CDN. Without this, some deploy
+  // paths can serve index.html with a non-HTML content type, which makes
+  // browsers render the raw markup as text instead of the page.
+  zip.file("_headers", "/*\n  Content-Type: text/html; charset=utf-8\n");
   let zipBuffer;
   try {
     zipBuffer = await zip.generateAsync({ type: "nodebuffer" });

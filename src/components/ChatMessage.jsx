@@ -1,6 +1,17 @@
+import { useState } from "react";
 import Button from "./ui/Button.jsx";
+import { IconCopy, IconCheck, IconRefresh } from "./ui/Icons.jsx";
 
-export default function ChatMessage({ role, text, status, source, pendingEdit, applied, onApply }) {
+export default function ChatMessage({ role, text, status, source, pendingEdit, applied, onApply, onRetry }) {
+  const [copied, setCopied] = useState(false);
+
+  function copyText() {
+    navigator.clipboard?.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }
+
   return (
     <div className={`chat-msg chat-msg--${role} ${status ? `chat-msg--${status}` : ""}`}>
       <span className="chat-msg__author">
@@ -17,6 +28,20 @@ export default function ChatMessage({ role, text, status, source, pendingEdit, a
         </div>
       )}
       {applied && <p className="chat-msg__applied">Applied</p>}
+      {role === "ai" && (
+        <div className={`chat-msg__actions ${status === "error" ? "always-show" : ""}`}>
+          <button type="button" className="chat-msg__action-btn" onClick={copyText}>
+            {copied ? <IconCheck size={12} /> : <IconCopy size={12} />}
+            {copied ? "Copied" : "Copy"}
+          </button>
+          {status === "error" && onRetry && (
+            <button type="button" className="chat-msg__action-btn" onClick={onRetry}>
+              <IconRefresh size={12} />
+              Retry
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

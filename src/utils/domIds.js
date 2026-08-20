@@ -70,6 +70,14 @@ export function withMutatedNode(html, vibeId, mutate) {
 
 export function withDocument(html, mutate) {
   const body = parseFragment(html);
+  // Every caller's `mutate` looks up the currently-selected element via
+  // `findTarget(body, selectedVibeId, ...)`, which needs `data-vibe-id`
+  // attributes to exist on this freshly-parsed body — otherwise the lookup
+  // always misses and silently falls back to a generic selector, editing
+  // the wrong element. Assign the same deterministic ids used by the
+  // preview/selection flow, then strip them again before returning.
+  assignVibeIds(body);
   mutate(body);
+  stripVibeIds(body);
   return serializeFragment(body);
 }

@@ -3,11 +3,13 @@ import { useProject } from "../state/ProjectContext.jsx";
 import { SUGGESTED_PROMPTS } from "../ai/engine.js";
 import ChatMessage from "./ChatMessage.jsx";
 import { Spinner } from "./ui/Primitives.jsx";
+import { IconSparkles, IconPlus, IconX, IconCpu, IconHistory, IconChevronDown } from "./ui/Icons.jsx";
 
 export default function AssistantPanel({ onCloseSidebar }) {
   const { project, isThinking, sendMessage, applyPendingEdit, dispatch } = useProject();
   const [input, setInput] = useState("");
   const [aiStatus, setAiStatus] = useState(null);
+  const [showSetup, setShowSetup] = useState(false);
   const endRef = useRef(null);
   const chatMode = project.editorState.chatMode || "build";
 
@@ -50,15 +52,27 @@ export default function AssistantPanel({ onCloseSidebar }) {
     <aside className="assistant-panel" aria-label="AI assistant">
       <div className="chat-head">
         <div className="chat-head-title">
-          <span className="ai-dot">V</span>
+          <span className="ai-dot"><IconSparkles size={12} /></span>
           <span>Vibe Assistant</span>
         </div>
         <div className="chat-head-actions">
-          <button className="shell-icon" type="button" aria-label="New chat" title="New chat">
-            +
+          <button
+            className="shell-icon"
+            type="button"
+            aria-label="New chat"
+            title="New chat"
+            disabled={project.chat.length === 0}
+            onClick={() => {
+              if (project.chat.length === 0) return;
+              if (window.confirm("Start a new chat? This clears the conversation but keeps your version history and files intact.")) {
+                dispatch({ type: "CLEAR_CHAT" });
+              }
+            }}
+          >
+            <IconPlus size={15} />
           </button>
           <button className="shell-icon" type="button" onClick={onCloseSidebar} aria-label="Close assistant" title="Close assistant">
-            x
+            <IconX size={15} />
           </button>
         </div>
       </div>
@@ -69,6 +83,36 @@ export default function AssistantPanel({ onCloseSidebar }) {
           <p>
             Select anything in the preview or describe a page-wide edit. Changes stay reversible in version history.
           </p>
+
+          {aiStatus && !aiStatus.configured && (
+            <div className="ai-mode-banner">
+              <div className="ai-mode-banner__row">
+                <IconCpu size={14} />
+                <span>
+                  Running on the <strong>local rule-based engine</strong> — no LLM key connected yet.
+                </span>
+              </div>
+              <button type="button" className="ai-mode-banner__toggle" onClick={() => setShowSetup((v) => !v)}>
+                {showSetup ? "Hide setup steps" : "Connect a real LLM (free)"}
+                <IconChevronDown size={11} style={{ transform: showSetup ? "rotate(180deg)" : "none" }} />
+              </button>
+              {showSetup && (
+                <ol className="ai-mode-banner__steps">
+                  <li>
+                    Get a free key at <code>openrouter.ai/keys</code> (no card required).
+                  </li>
+                  <li>
+                    In the project folder, copy <code>.env.example</code> to <code>.env.local</code>.
+                  </li>
+                  <li>
+                    Paste it as <code>OPENROUTER_API_KEY=your_key</code> in <code>.env.local</code>.
+                  </li>
+                  <li>Restart the dev server (stop it, then run it again) so the key loads.</li>
+                </ol>
+              )}
+            </div>
+          )}
+
           <div className="quick">
             {SUGGESTED_PROMPTS.map((prompt) => (
               <button key={prompt} type="button" onClick={() => submit(prompt)} disabled={isThinking}>
@@ -79,18 +123,22 @@ export default function AssistantPanel({ onCloseSidebar }) {
         </div>
 
         <div className="messages">
-          {project.chat.map((msg) => (
-            <ChatMessage
-              key={msg.id}
-              role={msg.role}
-              text={msg.text}
-              status={msg.status}
-              source={msg.source}
-              pendingEdit={msg.pendingEdit}
-              applied={msg.applied}
-              onApply={() => applyPendingEdit(msg.id)}
-            />
-          ))}
+          {project.chat.map((msg, idx) => {
+            const prevUser = [...project.chat.slice(0, idx)].reverse().find((m) => m.role === "user");
+            return (
+              <ChatMessage
+                key={msg.id}
+                role={msg.role}
+                text={msg.text}
+                status={msg.status}
+                source={msg.source}
+                pendingEdit={msg.pendingEdit}
+                applied={msg.applied}
+                onApply={() => applyPendingEdit(msg.id)}
+                onRetry={prevUser ? () => submit(prevUser.text) : undefined}
+              />
+            );
+          })}
 
           {isThinking && (
             <div className="msg progress">
@@ -109,7 +157,7 @@ export default function AssistantPanel({ onCloseSidebar }) {
             {selected ? `Editing ${selected.tag}${selected.text ? `: ${selected.text.slice(0, 34)}` : ""}` : ""}
           </span>
           <button type="button" onClick={() => dispatch({ type: "CLEAR_SELECTION" })} aria-label="Clear selection">
-            x
+            <IconX size={13} />
           </button>
         </div>
 
@@ -124,9 +172,13 @@ export default function AssistantPanel({ onCloseSidebar }) {
           />
           <div className="compose-foot">
             <div className="compose-left">
-              <button className="compose-icon" type="button" title={aiStatus?.configured ? "Live AI" : "Local engine"} aria-label="AI status">
-                {aiStatus?.configured ? "AI" : "L"}
-              </button>
+              <span
+                className={`compose-icon ${aiStatus?.configured ? "compose-icon--live" : "compose-icon--local"}`}
+                title={aiStatus?.configured ? "Connected to a live LLM" : "Local engine (no LLM key configured)"}
+              >
+                {aiStatus?.configured ? <IconSparkles size={12} /> : <IconCpu size={12} />}
+                <span>{aiStatus?.configured ? "Live AI" : "Local"}</span>
+              </span>
               <button
                 className={`mode-pill ${chatMode === "plan" ? "plan" : ""}`}
                 type="button"

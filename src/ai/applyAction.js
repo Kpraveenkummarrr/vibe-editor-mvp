@@ -1,4 +1,4 @@
-import { withMutatedNode, withDocument, parseFragment } from "../utils/domIds.js";
+import { withMutatedNode, withDocument, parseFragment, assignVibeIds } from "../utils/domIds.js";
 import { COLOR_WORDS, shadeHex, setBrandColor, currentBrandColor } from "./colors.js";
 
 function px(value, fallback) {
@@ -65,6 +65,19 @@ export function applyIntent(intent, { html, css, selectedVibeId, targetSelector 
       };
     }
 
+    case "text_replace": {
+      const nextHtml = withDocument(html, (body) => {
+        const el = findTarget(body, selectedVibeId, targetSelector);
+        if (!el) return;
+        el.textContent = intent.text;
+      });
+      const check = parseFragment(nextHtml);
+      assignVibeIds(check);
+      const changed = findTarget(check, selectedVibeId, targetSelector);
+      if (!changed) return null;
+      return { html: nextHtml, css, summary: `Changed the text to "${intent.text}"` };
+    }
+
     case "text_shorten": {
       const nextHtml = withDocument(html, (body) => {
         const el = findTarget(body, selectedVibeId, targetSelector);
@@ -78,6 +91,7 @@ export function applyIntent(intent, { html, css, selectedVibeId, targetSelector 
         }
       });
       const check = parseFragment(nextHtml);
+      assignVibeIds(check);
       const changed = findTarget(check, selectedVibeId, targetSelector);
       if (!changed) return null;
       return { html: nextHtml, css, summary: "Shortened the headline text" };

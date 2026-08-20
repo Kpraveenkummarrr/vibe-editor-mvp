@@ -1,29 +1,74 @@
 import { useEffect, useRef, useState } from "react";
 import { useProject } from "../state/ProjectContext.jsx";
 import Button from "./ui/Button.jsx";
+import { Badge } from "./ui/Primitives.jsx";
+import {
+  IconMonitor,
+  IconCode,
+  IconFolder,
+  IconHistory,
+  IconAlertTriangle,
+  IconTablet,
+  IconSmartphone,
+  IconChevronDown,
+  IconMenu,
+  IconRocket,
+  IconHammer,
+} from "./ui/Icons.jsx";
 
 const VIEW_TABS = [
-  { key: "preview", label: "Preview", icon: "P" },
-  { key: "code", label: "Code", icon: "</>" },
-  { key: "files", label: "Files", icon: "F" },
+  { key: "preview", label: "Preview", Icon: IconMonitor },
+  { key: "code", label: "Code", Icon: IconCode },
+  { key: "files", label: "Files", Icon: IconFolder },
+  { key: "changes", label: "History", Icon: IconHistory },
+  { key: "issues", label: "Issues", Icon: IconAlertTriangle },
 ];
 
 const VIEWPORTS = [
-  { key: "desktop", label: "Desktop", icon: "D" },
-  { key: "tablet", label: "Tablet", icon: "T" },
-  { key: "mobile", label: "Mobile", icon: "M" },
+  { key: "desktop", label: "Desktop", Icon: IconMonitor },
+  { key: "tablet", label: "Tablet", Icon: IconTablet },
+  { key: "mobile", label: "Mobile", Icon: IconSmartphone },
 ];
 
 export default function TopBar({ onOpenModal, sidebarOpen, onToggleSidebar }) {
-  const { workspace, project, dispatch, runBuild } = useProject();
+  const { workspace, project, dispatch, runBuild, issues } = useProject();
   const [menuOpen, setMenuOpen] = useState(false);
   const [saveState, setSaveState] = useState("saved");
+  const [publishConfigured, setPublishConfigured] = useState(true);
+  const [versionToast, setVersionToast] = useState(false);
   const menuRef = useRef(null);
   const saveTimer = useRef(null);
-  const activeView = ["preview", "code", "files"].includes(project.editorState.rightTab)
+  const prevChangeCount = useRef(project.changes.length);
+  const activeView = VIEW_TABS.some((t) => t.key === project.editorState.rightTab)
     ? project.editorState.rightTab
     : "preview";
   const allFiles = { ...project.files, ...project.customFiles };
+  const errorCount = issues.filter((i) => i.severity === "error").length;
+
+  useEffect(() => {
+    if (project.changes.length > prevChangeCount.current) {
+      setVersionToast(true);
+      const t = setTimeout(() => setVersionToast(false), 2600);
+      prevChangeCount.current = project.changes.length;
+      return () => clearTimeout(t);
+    }
+    prevChangeCount.current = project.changes.length;
+  }, [project.changes.length]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/publish-status")
+      .then((r) => (r.ok ? r.json() : { configured: false }))
+      .then((data) => {
+        if (!cancelled) setPublishConfigured(Boolean(data.configured));
+      })
+      .catch(() => {
+        if (!cancelled) setPublishConfigured(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     setSaveState("saving");
@@ -49,10 +94,19 @@ export default function TopBar({ onOpenModal, sidebarOpen, onToggleSidebar }) {
 
   return (
     <header className="topbar">
+      {versionToast && (
+        <div className="version-toast" role="status">
+          <IconHistory size={13} />
+          <span>New version saved</span>
+          <button type="button" onClick={() => dispatch({ type: "SET_RIGHT_TAB", tab: "changes" })}>
+            View
+          </button>
+        </div>
+      )}
       <div className="project-area">
         {!sidebarOpen && (
           <button className="open-sidebar" onClick={onToggleSidebar} aria-label="Open assistant">
-            =
+            <IconMenu size={16} />
           </button>
         )}
         <span className="logo" aria-hidden="true" />
@@ -60,13 +114,24 @@ export default function TopBar({ onOpenModal, sidebarOpen, onToggleSidebar }) {
           <div className="project-name-row">
             <span className="project-name">{project.name}</span>
             <button className="project-chevron" onClick={() => setMenuOpen((value) => !value)} aria-haspopup="true" aria-expanded={menuOpen}>
-              v
+              <IconChevronDown size={14} />
             </button>
           </div>
-          <div className="save">
+          <button
+            type="button"
+            className="save save--link"
+            onClick={() => dispatch({ type: "SET_RIGHT_TAB", tab: "changes" })}
+            title="Open version history"
+          >
             <span className={`save-dot ${saveState === "saving" ? "saving" : ""}`} />
             <span>{saveState === "saving" ? "Saving..." : "Saved locally"}</span>
-          </div>
+            {project.changes.length > 0 && (
+              <span className="save__history-link">
+                <IconHistory size={11} />
+                {project.changes.length} version{project.changes.length === 1 ? "" : "s"}
+              </span>
+            )}
+          </button>
 
           {menuOpen && (
             <div className="topbar__menu" role="menu">
@@ -138,10 +203,17 @@ export default function TopBar({ onOpenModal, sidebarOpen, onToggleSidebar }) {
               role="tab"
               className={`view-tab ${activeView === tab.key ? "active" : ""}`}
               aria-selected={activeView === tab.key}
+              title={tab.label}
               onClick={() => dispatch({ type: "SET_RIGHT_TAB", tab: tab.key })}
             >
-              <span className="view-tab__icon">{tab.icon}</span>
+              <span className="view-tab__icon"><tab.Icon size={14} strokeWidth={activeView === tab.key ? 2.1 : 1.8} /></span>
               <span>{tab.label}</span>
+              {tab.key === "changes" && project.changes.length > 0 && (
+                <Badge tone="neutral">{project.changes.length}</Badge>
+              )}
+              {tab.key === "issues" && issues.length > 0 && (
+                <Badge tone={errorCount > 0 ? "danger" : "warning"}>{issues.length}</Badge>
+              )}
             </button>
           ))}
         </div>
@@ -154,7 +226,7 @@ export default function TopBar({ onOpenModal, sidebarOpen, onToggleSidebar }) {
               aria-label={viewport.label}
               title={viewport.label}
             >
-              {viewport.icon}
+              <viewport.Icon size={15} />
             </button>
           ))}
           <select
@@ -175,6 +247,7 @@ export default function TopBar({ onOpenModal, sidebarOpen, onToggleSidebar }) {
           variant="secondary"
           size="sm"
           className="share"
+          icon={<IconHammer size={13} />}
           onClick={() => {
             runBuild();
             onOpenModal("build");
@@ -182,8 +255,9 @@ export default function TopBar({ onOpenModal, sidebarOpen, onToggleSidebar }) {
         >
           Build
         </Button>
-        <Button variant="primary" size="sm" className="publish" onClick={() => onOpenModal("publish")}>
+        <Button variant="primary" size="sm" className="publish" icon={<IconRocket size={13} />} onClick={() => onOpenModal("publish")}>
           Publish
+          {!publishConfigured && <span className="publish__setup-dot" title="Netlify isn't connected yet" />}
         </Button>
       </div>
     </header>

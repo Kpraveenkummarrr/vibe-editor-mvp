@@ -7,8 +7,7 @@ import { Spinner } from "../ui/Primitives.jsx";
 import { downloadTextFile, buildStandaloneHtml } from "../../utils/download.js";
 
 const ERROR_COPY = {
-  not_configured:
-    "Netlify isn't connected yet. Add a NETLIFY_API_TOKEN environment variable to enable one-click deploys (see README) — or download the HTML below and host it anywhere.",
+  not_configured: "not_configured",
   fix_issues_first: "Fix the errors in the Issues tab before publishing.",
   create_site_failed: "Netlify rejected the request to create a site. Check that your token is valid.",
   deploy_failed: "The deploy to Netlify failed. Check that your token has deploy permissions and try again.",
@@ -84,14 +83,32 @@ export default function PublishModal({ onClose }) {
 
         {status === "error" && (
           <div className="publish-modal__state publish-modal__state--error">
-            <p className="publish-modal__headline">⚠ Publish failed</p>
-            <p>{ERROR_COPY[error] || "Something went wrong publishing this project."}</p>
+            <p className="publish-modal__headline">⚠ {error === "not_configured" ? "Netlify isn't connected yet" : "Publish failed"}</p>
+            {error === "not_configured" ? (
+              <>
+                <p>Add a free Netlify personal access token to enable one-click deploys:</p>
+                <ol className="publish-modal__steps">
+                  <li>
+                    Create a token at <code>app.netlify.com/user/applications#personal-access-tokens</code>.
+                  </li>
+                  <li>
+                    Copy <code>.env.example</code> to <code>.env.local</code> in the project folder.
+                  </li>
+                  <li>
+                    Paste it as <code>NETLIFY_API_TOKEN=your_token</code> in <code>.env.local</code>.
+                  </li>
+                  <li>Restart the dev server so the token loads.</li>
+                </ol>
+              </>
+            ) : (
+              <p>{ERROR_COPY[error] || "Something went wrong publishing this project."}</p>
+            )}
             <div className="publish-modal__actions">
               {error === "fix_issues_first" ? (
                 <Button variant="secondary" onClick={goFixIssues}>Go to Issues</Button>
-              ) : (
+              ) : error !== "not_configured" ? (
                 <Button variant="secondary" onClick={runPublish}>Retry</Button>
-              )}
+              ) : null}
               <Button variant="ghost" onClick={downloadHtml}>Download HTML instead</Button>
             </div>
           </div>

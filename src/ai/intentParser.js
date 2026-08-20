@@ -13,6 +13,34 @@ import { findColorWord } from "./colors.js";
 export function classifyIntent(promptRaw) {
   const prompt = promptRaw.trim().toLowerCase();
 
+  // Style/color instructions that must NOT be misread as literal text replacement
+  // even when phrased as "change this to ...".
+  const STYLE_GUARD = /(darker|darken|lighter|lighten|brighten|colou?r|shorten|shorter|concise|trim|bigger|larger|bolder|emphasi[sz]e|premium|luxur|elevated|upscale|high[- ]end|modern|fresh|contemporary|spacing|padding|breathing room|cramped|crowded|tighter|looser|center|centre|mobile|responsive|small screen|phone|round|corner|remove|delete|hide)/i;
+
+  // Explicit mention of "text/headline/title/..." — unambiguous, always a text edit.
+  const explicitTextMatch = promptRaw.match(
+    /(?:change|set|replace|update|rename|turn)\s+(?:the\s+)?(?:text|headline|title|heading|copy|content|label)\b[\s\S]{0,20}?\b(?:to|into|with|as)\s*["']?([^"'.]+?)["']?[.!]?\s*$/i
+  );
+  if (explicitTextMatch && explicitTextMatch[1].trim()) {
+    return { type: "text_replace", text: explicitTextMatch[1].trim() };
+  }
+
+  // "make it/this say X" — explicit verb "say", also unambiguous.
+  const sayMatch = promptRaw.match(/make (?:it|this) say\s*["']?([^"'.]+?)["']?[.!]?\s*$/i);
+  if (sayMatch && sayMatch[1].trim()) {
+    return { type: "text_replace", text: sayMatch[1].trim() };
+  }
+
+  // Implicit "change this/it ... to/into X" (no explicit "text" keyword, may contain a
+  // typo like "etext"). Only treat as text replacement if the trailing part doesn't
+  // look like a style/color instruction, to avoid misreading "change this to darker green".
+  const implicitMatch = promptRaw.match(
+    /(?:change|set|replace|update|rename|turn)\s+(?:this|it)\b[\s\S]{0,20}?\b(?:to|into|with|as)\s*["']?([^"'.]+?)["']?[.!]?\s*$/i
+  );
+  if (implicitMatch && implicitMatch[1].trim() && !STYLE_GUARD.test(implicitMatch[1]) && !findColorWord(implicitMatch[1].toLowerCase())) {
+    return { type: "text_replace", text: implicitMatch[1].trim() };
+  }
+
   if (/darker|darken/.test(prompt)) {
     return { type: "color_adjust", direction: "darken", colorWord: findColorWord(prompt) };
   }
@@ -67,6 +95,7 @@ export function classifyIntent(promptRaw) {
  */
 export function heuristicTargetSelector(intentType) {
   switch (intentType) {
+    case "text_replace":
     case "text_shorten":
     case "text_emphasize":
       return ".hero__title, h1";
