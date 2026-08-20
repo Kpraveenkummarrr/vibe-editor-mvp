@@ -6,7 +6,7 @@ import { downloadTextFile } from "../../utils/download.js";
 
 export default function BuildModal({ onClose }) {
   const { project, runBuild } = useProject();
-  const { status, result } = project.buildState;
+  const { status, lastResult: result } = project.buildState;
 
   function download() {
     if (!result?.output) return;
