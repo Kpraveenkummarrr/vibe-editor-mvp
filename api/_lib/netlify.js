@@ -41,9 +41,22 @@ async function createSite(token, projectName) {
   const res = await netlifyFetch("/sites", token, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name: slugify(projectName) }),
+    body: JSON.stringify({ name: slugify(projectName), sso_login: false }),
   });
   if (!res.ok) return { ok: false, error: "create_site_failed", detail: res.raw?.slice(0, 300) };
+
+  // `sso_login: false` in the creation body above is accepted but doesn't
+  // reliably propagate to the edge auth gate — some Netlify team plans
+  // default new sites to "Team protection" (a Netlify-account login wall)
+  // regardless. A follow-up PATCH is what actually takes effect; without
+  // it, published links are unusable for the site's real (non-Netlify)
+  // visitors. Best-effort: a failure here shouldn't block publishing.
+  await netlifyFetch(`/sites/${res.data.id}`, token, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sso_login: false }),
+  }).catch(() => {});
+
   return { ok: true, siteId: res.data.id, url: res.data.ssl_url || res.data.url };
 }
 
