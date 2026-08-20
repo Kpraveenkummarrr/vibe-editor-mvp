@@ -190,7 +190,7 @@ export function ProjectProvider({ children }) {
       });
 
       if (!result.ok) {
-        dispatch({ type: "PUBLISH_RESULT", status: "error", error: result.error || "publish_failed" });
+        dispatch({ type: "PUBLISH_RESULT", status: "error", error: result.error || "publish_failed", detail: result.detail || null });
         return;
       }
 

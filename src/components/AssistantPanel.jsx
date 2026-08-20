@@ -10,12 +10,24 @@ export default function AssistantPanel({ onCloseSidebar }) {
   const [input, setInput] = useState("");
   const [aiStatus, setAiStatus] = useState(null);
   const [showSetup, setShowSetup] = useState(false);
+  const [slowThinking, setSlowThinking] = useState(false);
   const endRef = useRef(null);
   const chatMode = project.editorState.chatMode || "build";
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [project.chat.length, isThinking]);
+
+  // Free-tier LLM responses can take 15-20s; a bare spinner that long reads
+  // as "stuck" rather than "working" — say so explicitly past a few seconds.
+  useEffect(() => {
+    if (!isThinking) {
+      setSlowThinking(false);
+      return;
+    }
+    const t = setTimeout(() => setSlowThinking(true), 4000);
+    return () => clearTimeout(t);
+  }, [isThinking]);
 
   useEffect(() => {
     let cancelled = false;
@@ -143,7 +155,11 @@ export default function AssistantPanel({ onCloseSidebar }) {
           {isThinking && (
             <div className="msg progress">
               <Spinner />
-              <span>Applying your change...</span>
+              <span>
+                {slowThinking
+                  ? "Still working — the AI model can take up to 20s on the free tier..."
+                  : "Applying your change..."}
+              </span>
             </div>
           )}
 
@@ -192,9 +208,9 @@ export default function AssistantPanel({ onCloseSidebar }) {
               type="button"
               onClick={() => submit()}
               disabled={!input.trim() || isThinking}
-              aria-label="Send message"
+              aria-label={isThinking ? "Sending message" : "Send message"}
             >
-              {isThinking ? "Stop" : "Go"}
+              {isThinking ? "Sending…" : "Go"}
             </button>
           </div>
         </div>
