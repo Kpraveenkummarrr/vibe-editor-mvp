@@ -53,7 +53,16 @@ async function deployZip(token, siteId, zipBuffer) {
     headers: { "Content-Type": "application/zip" },
     body: zipBuffer,
   });
-  if (!res.ok) return { ok: false, error: "deploy_failed", detail: res.raw?.slice(0, 300) };
+  if (!res.ok) {
+    return {
+      ok: false,
+      error: "deploy_failed",
+      // Lets publishProject tell "the saved site was deleted out from under us"
+      // (recoverable — create a new one) apart from a real deploy failure.
+      siteMissing: res.status === 404,
+      detail: res.raw?.slice(0, 300),
+    };
+  }
   return { ok: true, deployId: res.data.id, url: res.data.ssl_url || res.data.deploy_ssl_url };
 }
 
@@ -98,7 +107,17 @@ export async function publishProject({ token, projectName, siteId, html }, env =
     return { ok: false, error: "zip_failed", detail: err.message };
   }
 
-  const deployed = await deployZip(apiKey, resolvedSiteId, zipBuffer);
+  let deployed = await deployZip(apiKey, resolvedSiteId, zipBuffer);
+  if (!deployed.ok && deployed.siteMissing && siteId) {
+    // The site this project remembers publishing to is gone (deleted from the
+    // Netlify dashboard, or from elsewhere) — recreate it once rather than
+    // leaving the project permanently stuck pointing at a dead site.
+    const created = await createSite(apiKey, projectName);
+    if (!created.ok) return created;
+    resolvedSiteId = created.siteId;
+    siteUrl = created.url;
+    deployed = await deployZip(apiKey, resolvedSiteId, zipBuffer);
+  }
   if (!deployed.ok) return deployed;
 
   const status = await pollDeployReady(apiKey, deployed.deployId);

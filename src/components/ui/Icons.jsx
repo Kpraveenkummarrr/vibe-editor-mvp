@@ -216,3 +216,52 @@ export function IconHammer(props) {
   );
 }
 
+export function IconImage(props) {
+  return (
+    <Icon {...props}>
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <circle cx="9" cy="9" r="2" />
+      <path d="m21 15-5-5L5 21" />
+    </Icon>
+  );
+}
+
+export function IconTrash(props) {
+  return (
+    <Icon {...props}>
+      <path d="M3 6h18" />
+      <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+      <line x1="10" y1="11" x2="10" y2="17" />
+      <line x1="14" y1="11" x2="14" y2="17" />
+    </Icon>
+  );
+}
+
+export function IconUpload(props) {
+  return (
+    <Icon {...props}>
+      <path d="M12 16V4" />
+      <path d="m7 9 5-5 5 5" />
+      <path d="M4 16v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
+    </Icon>
+  );
+}
+
+export function IconFile(props) {
+  return (
+    <Icon {...props}>
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+      <polyline points="14 2 14 8 20 8" />
+    </Icon>
+  );
+}
+
+export function IconPencil(props) {
+  return (
+    <Icon {...props}>
+      <path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
+    </Icon>
+  );
+}
+

@@ -3,7 +3,7 @@ import { useProject } from "../state/ProjectContext.jsx";
 import { SUGGESTED_PROMPTS } from "../ai/engine.js";
 import ChatMessage from "./ChatMessage.jsx";
 import { Spinner } from "./ui/Primitives.jsx";
-import { IconSparkles, IconPlus, IconX, IconCpu, IconHistory, IconChevronDown } from "./ui/Icons.jsx";
+import { IconSparkles, IconPlus, IconX, IconCpu, IconChevronDown } from "./ui/Icons.jsx";
 
 export default function AssistantPanel({ onCloseSidebar }) {
   const { project, isThinking, sendMessage, applyPendingEdit, dispatch } = useProject();
