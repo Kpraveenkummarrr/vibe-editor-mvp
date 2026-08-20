@@ -67,7 +67,7 @@ describe("sanitizeAction", () => {
 
 describe("getAiStatus", () => {
   it("reports not configured when no key is present", () => {
-    expect(getAiStatus({})).toEqual({ configured: false, model: "meta-llama/llama-3.1-8b-instruct:free" });
+    expect(getAiStatus({})).toEqual({ configured: false, model: "poolside/laguna-s-2.1:free" });
   });
 
   it("reports configured when a key is present, with model override", () => {

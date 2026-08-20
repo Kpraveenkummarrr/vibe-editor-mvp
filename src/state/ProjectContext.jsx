@@ -2,7 +2,7 @@
    exports both the ProjectProvider component and the useProject hook together */
 import { createContext, useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { reducer } from "./reducer.js";
-import { createInitialWorkspace } from "./defaultProjectFactory.js";
+import { createInitialWorkspace, createProject, DEMO_PROJECT_NAMES } from "./defaultProjectFactory.js";
 import { loadWorkspace, saveWorkspace } from "../utils/storage.js";
 import { processPrompt } from "../ai/engine.js";
 import { validateProject } from "../utils/validateHtml.js";
@@ -13,13 +13,26 @@ import { nextId } from "../utils/id.js";
 const ProjectStateContext = createContext(null);
 
 function init() {
-  const workspace = loadWorkspace() || createInitialWorkspace();
+  const saved = loadWorkspace();
+  const workspace = saved || createInitialWorkspace();
+
+  // Migration for workspaces saved before `assets` existed, and before the
+  // starter demo projects were seeded — keeps older localStorage state
+  // compatible with the current project shape instead of crashing on it.
+  const hasDemoProjects = DEMO_PROJECT_NAMES.every((name) =>
+    workspace.projects.some((p) => p.name === name)
+  );
+  const projects = workspace.projects.map((project) => ({
+    assets: [],
+    ...project,
+    editorState: { ...project.editorState, rightTab: "preview" },
+  }));
+
   return {
     ...workspace,
-    projects: workspace.projects.map((project) => ({
-      ...project,
-      editorState: { ...project.editorState, rightTab: "preview" },
-    })),
+    projects: saved && !hasDemoProjects
+      ? [...projects, ...DEMO_PROJECT_NAMES.map((name) => createProject(name))]
+      : projects,
   };
 }
 
@@ -27,6 +40,11 @@ export function ProjectProvider({ children }) {
   const [workspace, dispatch] = useReducer(reducer, undefined, init);
   const [isThinking, setIsThinking] = useState(false);
   const saveTimer = useRef(null);
+  // Ref (not state) so a rapid repeat click is blocked synchronously — state
+  // wouldn't commit until after the click handler returns, leaving a window
+  // where multiple in-flight publishes could each read a still-null siteId
+  // and each create a brand new Netlify site instead of reusing one.
+  const publishInFlight = useRef(false);
 
   useEffect(() => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -141,38 +159,45 @@ export function ProjectProvider({ children }) {
   }, [project.files, project.name]);
 
   const runPublish = useCallback(async () => {
-    dispatch({ type: "PUBLISH_START" });
+    if (publishInFlight.current) return;
+    publishInFlight.current = true;
 
-    const buildIssues = validateProject({
-      html: project.files["index.html"],
-      css: project.files["styles.css"],
-    });
-    if (buildIssues.some((i) => i.severity === "error")) {
-      dispatch({ type: "PUBLISH_RESULT", status: "error", error: "fix_issues_first" });
-      return;
-    }
+    try {
+      dispatch({ type: "PUBLISH_START" });
 
-    const html = buildStandaloneHtml(
-      {
+      const buildIssues = validateProject({
         html: project.files["index.html"],
         css: project.files["styles.css"],
-        js: project.files["script.js"],
-      },
-      project.name
-    );
+      });
+      if (buildIssues.some((i) => i.severity === "error")) {
+        dispatch({ type: "PUBLISH_RESULT", status: "error", error: "fix_issues_first" });
+        return;
+      }
 
-    const result = await requestPublish({
-      projectName: project.name,
-      siteId: project.publishState.siteId,
-      html,
-    });
+      const html = buildStandaloneHtml(
+        {
+          html: project.files["index.html"],
+          css: project.files["styles.css"],
+          js: project.files["script.js"],
+        },
+        project.name
+      );
 
-    if (!result.ok) {
-      dispatch({ type: "PUBLISH_RESULT", status: "error", error: result.error || "publish_failed" });
-      return;
+      const result = await requestPublish({
+        projectName: project.name,
+        siteId: project.publishState.siteId,
+        html,
+      });
+
+      if (!result.ok) {
+        dispatch({ type: "PUBLISH_RESULT", status: "error", error: result.error || "publish_failed" });
+        return;
+      }
+
+      dispatch({ type: "PUBLISH_RESULT", status: "success", url: result.url, siteId: result.siteId });
+    } finally {
+      publishInFlight.current = false;
     }
-
-    dispatch({ type: "PUBLISH_RESULT", status: "success", url: result.url, siteId: result.siteId });
   }, [project.files, project.name, project.publishState.siteId]);
 
   const value = useMemo(

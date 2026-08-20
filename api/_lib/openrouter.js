@@ -9,7 +9,7 @@
  */
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-const DEFAULT_MODEL = "meta-llama/llama-3.1-8b-instruct:free";
+const DEFAULT_MODEL = "poolside/laguna-s-2.1:free";
 
 export const ALLOWED_STYLE_PROPS = [
   "color",

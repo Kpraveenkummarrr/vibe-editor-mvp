@@ -1,60 +1,89 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useProject } from "../../state/ProjectContext.jsx";
 import Button from "../ui/Button.jsx";
+import { IconUpload, IconTrash, IconCopy, IconImage } from "../ui/Icons.jsx";
+import { nextId } from "../../utils/id.js";
 
-const CORE_ICON = { "index.html": "HTML", "styles.css": "CSS", "script.js": "JS" };
-
-function formatSize(content) {
-  const bytes = new Blob([content || ""]).size;
+function formatSize(bytes) {
   return bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`;
 }
 
-function FileCard({ name, content, active, canDelete, onOpen, onDelete }) {
-  const label = CORE_ICON[name] || "DOC";
+function readAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+function AssetCard({ asset, onDelete }) {
+  const [copied, setCopied] = useState(false);
+
+  async function copyUrl() {
+    try {
+      await navigator.clipboard.writeText(asset.dataUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1400);
+    } catch {
+      window.prompt("Copy this image URL:", asset.dataUrl);
+    }
+  }
 
   return (
-    <li>
-      <button className={`file-card ${active ? "active" : ""}`} onClick={onOpen}>
-        <span className="file-icon">{label}</span>
-        <span className="file-info">
-          <span className="file-name">{name}</span>
-          <span className="file-path">{formatSize(content)}</span>
-        </span>
-      </button>
-      {canDelete && (
-        <button className="file-delete" aria-label={`Delete ${name}`} onClick={onDelete}>
-          Del
+    <li className="asset-card">
+      <div className="asset-card__thumb">
+        <img src={asset.dataUrl} alt={asset.name} />
+      </div>
+      <div className="asset-card__info">
+        <span className="asset-card__name" title={asset.name}>{asset.name}</span>
+        <span className="asset-card__size">{formatSize(asset.size)}</span>
+      </div>
+      <div className="asset-card__actions">
+        <button className="asset-card__btn" onClick={copyUrl} aria-label={`Copy URL for ${asset.name}`} title="Copy image URL">
+          <IconCopy size={13} />
+          {copied ? "Copied" : "Copy URL"}
         </button>
-      )}
+        <button className="asset-card__btn asset-card__btn--danger" onClick={onDelete} aria-label={`Delete ${asset.name}`} title="Delete">
+          <IconTrash size={13} />
+        </button>
+      </div>
     </li>
   );
 }
 
 export default function FilesTab() {
   const { project, dispatch } = useProject();
-  const [newFileName, setNewFileName] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState(null);
+  const inputRef = useRef(null);
+  const assets = project.assets || [];
 
-  const files = [
-    ...Object.entries(project.files).map(([name, content]) => ({ name, content, canDelete: false })),
-    ...Object.entries(project.customFiles).map(([name, content]) => ({ name, content, canDelete: true })),
-  ];
-
-  function openFile(name) {
-    dispatch({ type: "SET_ACTIVE_FILE", name });
-    dispatch({ type: "SET_RIGHT_TAB", tab: "code" });
-  }
-
-  function createFile(e) {
-    e.preventDefault();
-    const name = newFileName.trim();
-    if (!name) return;
-    if (project.files[name] || project.customFiles[name]) {
-      window.alert(`A file named "${name}" already exists.`);
-      return;
+  async function handleFiles(fileList) {
+    const files = Array.from(fileList || []).filter((f) => f.type.startsWith("image/"));
+    if (!files.length) return;
+    setUploading(true);
+    setError(null);
+    try {
+      for (const file of files) {
+        const dataUrl = await readAsDataUrl(file);
+        dispatch({
+          type: "ADD_ASSET",
+          asset: {
+            id: nextId("asset"),
+            name: file.name,
+            size: file.size,
+            type: file.type,
+            dataUrl,
+            uploadedAt: Date.now(),
+          },
+        });
+      }
+    } catch {
+      setError("Couldn't read that file — try a different image.");
+    } finally {
+      setUploading(false);
     }
-    dispatch({ type: "CREATE_CUSTOM_FILE", name, content: "" });
-    dispatch({ type: "SET_RIGHT_TAB", tab: "code" });
-    setNewFileName("");
   }
 
   return (
@@ -62,46 +91,63 @@ export default function FilesTab() {
       <div className="files-shell">
         <div className="files-head">
           <div>
-            <div className="files-title">Files</div>
-            <div className="files-subtitle">{files.length} project files</div>
+            <div className="files-title">Assets</div>
+            <div className="files-subtitle">{assets.length} uploaded image{assets.length === 1 ? "" : "s"}</div>
           </div>
           <div className="files-actions">
-            <Button variant="secondary" size="sm" onClick={() => dispatch({ type: "SET_RIGHT_TAB", tab: "code" })}>
-              Open code
+            <input
+              ref={inputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              hidden
+              onChange={(e) => {
+                handleFiles(e.target.files);
+                e.target.value = "";
+              }}
+            />
+            <Button
+              variant="primary"
+              size="sm"
+              icon={<IconUpload size={13} />}
+              onClick={() => inputRef.current?.click()}
+              disabled={uploading}
+            >
+              {uploading ? "Uploading…" : "Upload image"}
             </Button>
           </div>
         </div>
 
-        <ul className="files-grid">
-          {files.map((file) => (
-            <FileCard
-              key={file.name}
-              name={file.name}
-              content={file.content}
-              active={project.activeFile === file.name}
-              canDelete={file.canDelete}
-              onOpen={() => openFile(file.name)}
-              onDelete={() => {
-                if (window.confirm(`Delete "${file.name}"?`)) {
-                  dispatch({ type: "DELETE_CUSTOM_FILE", name: file.name });
-                }
-              }}
-            />
-          ))}
-        </ul>
+        {error && <div className="files-error">{error}</div>}
 
-        <form className="files-new" onSubmit={createFile}>
-          <input
-            type="text"
-            placeholder="notes.txt"
-            value={newFileName}
-            onChange={(e) => setNewFileName(e.target.value)}
-            aria-label="New file name"
-          />
-          <Button type="submit" variant="secondary" size="sm" disabled={!newFileName.trim()}>
-            New file
-          </Button>
-        </form>
+        {assets.length === 0 ? (
+          <div
+            className="assets-empty"
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => {
+              e.preventDefault();
+              handleFiles(e.dataTransfer.files);
+            }}
+          >
+            <IconImage size={28} />
+            <p>No images yet</p>
+            <p className="assets-empty__hint">Upload logos, photos, or icons — drag &amp; drop or use the button above. Copy an image&rsquo;s URL to paste into your page&rsquo;s HTML.</p>
+          </div>
+        ) : (
+          <ul className="files-grid assets-grid">
+            {assets.map((asset) => (
+              <AssetCard
+                key={asset.id}
+                asset={asset}
+                onDelete={() => {
+                  if (window.confirm(`Delete "${asset.name}"?`)) {
+                    dispatch({ type: "DELETE_ASSET", id: asset.id });
+                  }
+                }}
+              />
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   );

@@ -5,7 +5,7 @@ import { Badge } from "./ui/Primitives.jsx";
 import {
   IconMonitor,
   IconCode,
-  IconFolder,
+  IconImage,
   IconHistory,
   IconAlertTriangle,
   IconTablet,
@@ -19,7 +19,7 @@ import {
 const VIEW_TABS = [
   { key: "preview", label: "Preview", Icon: IconMonitor },
   { key: "code", label: "Code", Icon: IconCode },
-  { key: "files", label: "Files", Icon: IconFolder },
+  { key: "files", label: "Assets", Icon: IconImage },
   { key: "changes", label: "History", Icon: IconHistory },
   { key: "issues", label: "Issues", Icon: IconAlertTriangle },
 ];
@@ -43,6 +43,7 @@ export default function TopBar({ onOpenModal, sidebarOpen, onToggleSidebar }) {
     ? project.editorState.rightTab
     : "preview";
   const allFiles = { ...project.files, ...project.customFiles };
+  const pages = Object.keys(allFiles).filter((name) => name.endsWith(".html"));
   const errorCount = issues.filter((i) => i.severity === "error").length;
 
   useEffect(() => {
@@ -231,11 +232,11 @@ export default function TopBar({ onOpenModal, sidebarOpen, onToggleSidebar }) {
           ))}
           <select
             className="page-picker"
-            value={project.activeFile}
+            value={pages.includes(project.activeFile) ? project.activeFile : pages[0]}
             onChange={(e) => dispatch({ type: "SET_ACTIVE_FILE", name: e.target.value })}
-            aria-label="Current file"
+            aria-label="Current page"
           >
-            {Object.keys(allFiles).map((name) => (
+            {pages.map((name) => (
               <option key={name} value={name}>{name}</option>
             ))}
           </select>

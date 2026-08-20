@@ -136,6 +136,36 @@ export function reducer(workspace, action) {
       });
     }
 
+    case "RENAME_CUSTOM_FILE": {
+      return mapActiveProject(workspace, activeId, (p) => {
+        const { name, nextName } = action;
+        if (!nextName || nextName === name || !Object.prototype.hasOwnProperty.call(p.customFiles, name)) return p;
+        if (p.files[nextName] !== undefined || p.customFiles[nextName] !== undefined) return p;
+        const nextCustom = { ...p.customFiles };
+        nextCustom[nextName] = nextCustom[name];
+        delete nextCustom[name];
+        return {
+          ...p,
+          customFiles: nextCustom,
+          activeFile: p.activeFile === name ? nextName : p.activeFile,
+        };
+      });
+    }
+
+    case "ADD_ASSET": {
+      return mapActiveProject(workspace, activeId, (p) => ({
+        ...p,
+        assets: [action.asset, ...p.assets],
+      }));
+    }
+
+    case "DELETE_ASSET": {
+      return mapActiveProject(workspace, activeId, (p) => ({
+        ...p,
+        assets: p.assets.filter((a) => a.id !== action.id),
+      }));
+    }
+
     case "ADD_CHAT_MESSAGE": {
       return mapActiveProject(workspace, activeId, (p) => ({ ...p, chat: [...p.chat, action.message] }));
     }
