@@ -2,6 +2,7 @@ import { classifyIntent, heuristicTargetSelector } from "./intentParser.js";
 import { applyIntent } from "./applyAction.js";
 import { applyLLMAction } from "./applyLLMAction.js";
 import { nextId } from "../utils/id.js";
+import { annotateForPreview } from "../utils/domIds.js";
 
 /**
  * Editing engine entry point. Tries a real LLM call (OpenRouter, via our own
@@ -12,8 +13,8 @@ import { nextId } from "../utils/id.js";
  * except via the returned `source` field — used only for the small status
  * badge in the UI, never to change behavior.
  *
- * @param {{ prompt: string, files: {html: string, css: string}, selectedElement: {vibeId, tag, text} | null }} input
- * @returns {Promise<{ reply: string, files: {html: string, css: string} | null, summary: string | null, actionType: string | null, source: "llm" | "local" }>}
+ * @param {{ prompt: string, files: {html: string, css: string, js: string}, selectedElement: {vibeId, tag, text} | null }} input
+ * @returns {Promise<{ reply: string, files: {html: string, css: string, js?: string} | null, summary: string | null, actionType: string | null, source: "llm" | "local" }>}
  */
 export async function processPrompt({ prompt, files, selectedElement, assets }) {
   if (!prompt || !prompt.trim()) {
@@ -151,13 +152,22 @@ async function tryLiveEdit({ prompt, files, selectedElement, assets }) {
       headers: { "Content-Type": "application/json" },
       // Only asset NAMES go to the server/model — never dataUrl. This keeps
       // the request small (no multi-KB base64 payloads inflating tokens/cost)
-      // and means the model picks an image by name (imageAssetName) rather
-      // than needing to see or reproduce its actual data.
+      // and means the model picks an image by name (vibe-asset: placeholder)
+      // rather than needing to see or reproduce its actual data.
+      //
+      // html is sent with the same data-vibe-id markers the live preview
+      // uses (annotateForPreview is deterministic — pre-order traversal
+      // over the same content always assigns the same ids), so
+      // selectedElement.vibeId lines up with an id the model can actually
+      // see and reference, and the model can echo those same ids back on
+      // elements it doesn't touch so applyLLMAction.js can resolve
+      // onClickAlert precisely.
       body: JSON.stringify({
         prompt,
         selectedElement,
-        html: files.html,
+        html: annotateForPreview(files.html),
         css: files.css,
+        js: files.js,
         assetNames: (assets || []).map((a) => a.name),
       }),
       signal: controller.signal,
@@ -176,14 +186,14 @@ async function tryLiveEdit({ prompt, files, selectedElement, assets }) {
     return { ok: false, reason: data.error === "not_configured" ? null : `live AI failed (${data.error || "unknown_error"})` };
   }
 
-  const applied = applyLLMAction(data.action, { html: files.html, css: files.css, selectedElement, assets });
+  const applied = applyLLMAction(data.action, { html: files.html, css: files.css, js: files.js, assets });
   if (!applied) return { ok: false, reason: "the model's response couldn't be safely applied to the page" };
 
   return {
     ok: true,
     result: {
       reply: data.action.reply,
-      files: { html: applied.html, css: applied.css },
+      files: { html: applied.html, css: applied.css, js: applied.js },
       summary: applied.summary,
       actionType: "llm_edit",
       source: "llm",

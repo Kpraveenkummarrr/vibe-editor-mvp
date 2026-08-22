@@ -15,12 +15,23 @@
  */
 import { buildSystemPrompt, buildUserPrompt, extractJson, repairTruncatedJson, sanitizeAction } from "./openrouter.js";
 
-const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
+// "gemini-2.5-flash" (the original default) 404s for this project's key with
+// "no longer available to new users" — confirmed directly against Google's
+// API. "gemini-flash-latest" (tried next) resolves to a "thinking" model
+// (currently gemini-3.7-flash) which (a) burns maxOutputTokens on an
+// invisible reasoning pass before the actual JSON, frequently returning
+// finishReason MAX_TOKENS with empty content, and (b) carries a very tight
+// free-tier quota (20 requests/day) — both also confirmed directly, not
+// assumed. "gemini-flash-lite-latest" doesn't think by default, so it
+// reliably returns real content within a small token budget on the first
+// try, and it's a lighter, cheaper model anyway for this task (a small
+// constrained JSON action, not something that benefits from reasoning).
+const DEFAULT_GEMINI_MODEL = "gemini-flash-lite-latest";
 
 /**
  * @returns {Promise<{ok: true, action: object, model: string} | {ok: false, error: string, detail?: string}>}
  */
-export async function requestGeminiEdit({ prompt, selectedElement, html, css, assetNames }, env = process.env) {
+export async function requestGeminiEdit({ prompt, selectedElement, html, css, js, assetNames }, env = process.env) {
   const apiKey = env.GEMINI_API_KEY;
   if (!apiKey) return { ok: false, error: "not_configured" };
 
@@ -29,14 +40,20 @@ export async function requestGeminiEdit({ prompt, selectedElement, html, css, as
 
   const body = {
     system_instruction: { parts: [{ text: buildSystemPrompt() }] },
-    contents: [{ role: "user", parts: [{ text: buildUserPrompt({ prompt, selectedElement, html, css, assetNames }) }] }],
+    contents: [{ role: "user", parts: [{ text: buildUserPrompt({ prompt, selectedElement, html, css, js, assetNames }) }] }],
     generationConfig: {
       temperature: 0.4,
-      maxOutputTokens: 900,
+      // Returning the full page html/css (not a small fixed action) needs a
+      // much larger budget than the old schema's 900 tokens.
+      maxOutputTokens: 8192,
       // Gemini can enforce JSON output directly — a real reliability
       // advantage over prompt-only JSON instructions, which is what caused
       // the invalid_json/truncation issues seen with free OpenRouter models.
       responseMimeType: "application/json",
+      // Deliberately no thinkingConfig here: gemini-flash-lite-latest (the
+      // default above) rejects it outright with 400 INVALID_ARGUMENT
+      // (confirmed directly against the API) — it isn't a thinking model,
+      // so the field doesn't apply to it in the first place.
     },
   };
 
