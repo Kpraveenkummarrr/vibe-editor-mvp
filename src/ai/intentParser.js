@@ -15,7 +15,7 @@ export function classifyIntent(promptRaw) {
 
   // Style/color instructions that must NOT be misread as literal text replacement
   // even when phrased as "change this to ...".
-  const STYLE_GUARD = /(darker|darken|lighter|lighten|brighten|colou?r|shorten|shorter|concise|trim|bigger|larger|bolder|emphasi[sz]e|premium|luxur|elevated|upscale|high[- ]end|modern|fresh|contemporary|spacing|padding|breathing room|cramped|crowded|tighter|looser|center|centre|mobile|responsive|small screen|phone|round|corner|remove|delete|hide)/i;
+  const STYLE_GUARD = /(darker|darken|lighter|lighten|brighten|colou?r|shorten|shorter|concise|trim|bigger|larger|bolder|emphasi[sz]e|premium|luxur|elevated|upscale|high[- ]end|modern|fresh|contemporary|spacing|padding|breathing room|cramped|crowded|tighter|looser|center|centre|mobile|responsive|small screen|phone|round|corner|remove|delete|hide|font|typeface|typography|style|design|look|background|layout|weight|align)/i;
 
   // Explicit mention of "text/headline/title/..." — unambiguous, always a text edit.
   const explicitTextMatch = promptRaw.match(
@@ -37,14 +37,31 @@ export function classifyIntent(promptRaw) {
   const implicitMatch = promptRaw.match(
     /(?:change|set|replace|update|rename|turn)\s+(?:this|it)\b[\s\S]{0,20}?\b(?:to|into|with|as)\s*["']?([^"'.]+?)["']?[.!]?\s*$/i
   );
-  if (implicitMatch && implicitMatch[1].trim() && !STYLE_GUARD.test(implicitMatch[1]) && !findColorWord(implicitMatch[1].toLowerCase())) {
+  // Guard against the FULL matched phrase (e.g. "change this text font into
+  // various"), not just the captured replacement value ("various") — a style
+  // word like "font" sitting between "this" and "into" means the user is
+  // describing a style change, not literal replacement text, even though the
+  // captured value itself ("various") looks like harmless plain text.
+  if (
+    implicitMatch &&
+    implicitMatch[1].trim() &&
+    !STYLE_GUARD.test(implicitMatch[0]) &&
+    !findColorWord(implicitMatch[0].toLowerCase())
+  ) {
     return { type: "text_replace", text: implicitMatch[1].trim() };
+  }
+  if (/\bfont\b|typeface|typography/.test(prompt)) {
+    return { type: "style_font" };
+  }
+
+  if (/(image|photo|picture|logo|upload|thumbnail)/.test(prompt)) {
+    return { type: "image_use" };
   }
 
   if (/darker|darken/.test(prompt)) {
     return { type: "color_adjust", direction: "darken", colorWord: findColorWord(prompt) };
   }
-  if (/lighter|lighten|brighten/.test(prompt)) {
+  if (/\blighter\b|\blighten|\bbrighten/.test(prompt)) {
     return { type: "color_adjust", direction: "lighten", colorWord: findColorWord(prompt) };
   }
   const colorWord = findColorWord(prompt);
@@ -52,7 +69,7 @@ export function classifyIntent(promptRaw) {
     return { type: "color_set", colorWord };
   }
 
-  if (/(shorten|shorter|more concise|too long|trim)/.test(prompt)) {
+  if (/(shorten|shorter|more concise|too long|\btrim\b)/.test(prompt)) {
     return { type: "text_shorten" };
   }
   if (/(bigger|larger|bolder|more bold|emphasi[sz]e)/.test(prompt)) {
@@ -78,7 +95,7 @@ export function classifyIntent(promptRaw) {
     return { type: "layout_responsive" };
   }
 
-  if (/(round|corner)/.test(prompt)) {
+  if (/\bround(ed)?\b|\bcorners?\b|border-radius/.test(prompt)) {
     return { type: "style_rounded" };
   }
 
@@ -103,6 +120,8 @@ export function heuristicTargetSelector(intentType) {
     case "style_modern":
     case "spacing_increase":
       return "[data-vibe-section='hero'], .hero";
+    case "image_use":
+      return "[data-vibe-section='hero'] img, .hero img, [data-vibe-section='hero'], .hero";
     case "layout_responsive":
       return null; // page-wide, handled specially
     case "color_set":
