@@ -91,6 +91,14 @@ export function ProjectProvider({ children }) {
         };
         dispatch({ type: "ADD_CHAT_MESSAGE", message: aiMessage });
 
+        // A pasted-into-chat image (see src/ai/engine.js's extractPastedImage)
+        // gets saved to Assets even in plan mode — it's a real file the user
+        // just handed over, not a pending edit to review, so there's nothing
+        // to "apply" about having captured it.
+        if (result.newAsset) {
+          dispatch({ type: "ADD_ASSET", asset: result.newAsset });
+        }
+
         if (result.files && !planOnly) {
           dispatch({ type: "APPLY_AI_EDIT", files: result.files, summary: result.summary });
         }

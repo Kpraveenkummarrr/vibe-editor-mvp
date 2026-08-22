@@ -1,6 +1,7 @@
 import { classifyIntent, heuristicTargetSelector } from "./intentParser.js";
 import { applyIntent } from "./applyAction.js";
 import { applyLLMAction } from "./applyLLMAction.js";
+import { nextId } from "../utils/id.js";
 
 /**
  * Editing engine entry point. Tries a real LLM call (OpenRouter, via our own
@@ -25,21 +26,16 @@ export async function processPrompt({ prompt, files, selectedElement, assets }) 
     };
   }
 
-  // A pasted data: URI (someone copying raw image data into the chat box
-  // instead of using the Assets tab) can never work: it's hundreds of KB of
-  // text with no field in the action schema to carry it, and even if there
-  // were, api/_lib/openrouter.js's 200-char CSS-value cap would reject it.
-  // Catching this up front avoids burning a live LLM round-trip that was
-  // always going to come back as an unhelpful "empty_action".
-  if (/data:image\/[a-z0-9.+-]+;base64,/i.test(prompt)) {
-    return {
-      reply:
-        "That looks like raw image data pasted into the chat — that can't be used directly. Upload the image in the Assets tab instead, then just ask me to use it, e.g. \"use the uploaded image in the hero section\" (I'll pick the most recently uploaded one, or name the file if you have more than one).",
-      files: null,
-      summary: null,
-      actionType: "image_use",
-      source: "local",
-    };
+  // A pasted data: URI (e.g. copying the Assets tab's own "Copy URL" button
+  // output straight back into the chat box, which is apparently how real
+  // clients do this) is real image data sitting right there in the prompt —
+  // extract and apply it directly rather than rejecting it. This never goes
+  // through the live LLM: sending hundreds of KB of base64 to a model would
+  // be wasteful and pointless when we can just decode it ourselves locally,
+  // instantly, for free.
+  const pastedImage = extractPastedImage(prompt);
+  if (pastedImage) {
+    return applyPastedImage(pastedImage, { files, selectedElement });
   }
 
   const live = await tryLiveEdit({ prompt, files, selectedElement, assets });
@@ -67,6 +63,70 @@ function resolveAssetFromPrompt(prompt, assets) {
     return lower.includes(a.name.toLowerCase()) || (base.length > 2 && lower.includes(base));
   });
   return named || assets[assets.length - 1];
+}
+
+/**
+ * Finds a data:image/...;base64,... URI anywhere in a prompt (not just at
+ * the start — real prompts have text before it, e.g. "use this image: data:...")
+ * and turns it into the same asset shape FilesTab.jsx creates from a real
+ * file upload, so it flows through the exact same image_use / applyImageAsset
+ * path either way.
+ */
+function extractPastedImage(prompt) {
+  const match = /data:image\/([a-z0-9.+-]+);base64,([A-Za-z0-9+/=]+)/i.exec(prompt);
+  if (!match) return null;
+
+  const [dataUrl, subtype, payload] = match;
+  const ext = subtype.split("+")[0].replace(/[^a-z0-9]/gi, "").toLowerCase() || "img";
+  const normalizedExt = ext === "jpeg" ? "jpg" : ext;
+  // Rough size estimate from base64 length (each 4 base64 chars ≈ 3 bytes;
+  // padding '=' chars don't count) — good enough for the Assets list display,
+  // not used for anything that needs to be exact.
+  const size = Math.floor((payload.replace(/=+$/, "").length * 3) / 4);
+
+  return {
+    id: nextId("asset"),
+    name: `pasted-image-${Date.now().toString(36)}.${normalizedExt}`,
+    size,
+    type: `image/${subtype}`,
+    dataUrl,
+    uploadedAt: Date.now(),
+  };
+}
+
+function applyPastedImage(asset, { files, selectedElement }) {
+  const intent = { type: "image_use", asset };
+  const targetSelector = heuristicTargetSelector(intent.type);
+
+  const result = applyIntent(intent, {
+    html: files.html,
+    css: files.css,
+    selectedVibeId: selectedElement ? selectedElement.vibeId : null,
+    targetSelector,
+  });
+
+  if (!result) {
+    return {
+      reply: "I found the pasted image but couldn't find a good spot to place it — try selecting an element first.",
+      files: null,
+      summary: null,
+      actionType: "image_use",
+      source: "local",
+    };
+  }
+
+  return {
+    reply: `Used your pasted image ${selectedElement ? `on the selected ${selectedElement.tag}` : "in the hero section"}. Saved it to Assets as "${asset.name}" so you can reuse it by name later.`,
+    files: { html: result.html, css: result.css },
+    summary: result.summary,
+    actionType: "image_use",
+    source: "local",
+    // ProjectContext.jsx dispatches ADD_ASSET for this alongside APPLY_AI_EDIT
+    // so the Assets tab and future "use hero-photo.jpg"-style name lookups
+    // stay in sync with what was just pasted, exactly as if it had been
+    // uploaded through the Assets tab in the first place.
+    newAsset: asset,
+  };
 }
 
 /**
