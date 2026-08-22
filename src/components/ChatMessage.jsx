@@ -2,7 +2,7 @@ import { useState } from "react";
 import Button from "./ui/Button.jsx";
 import { IconCopy, IconCheck, IconRefresh } from "./ui/Icons.jsx";
 
-export default function ChatMessage({ role, text, status, source, pendingEdit, applied, onApply, onRetry }) {
+export default function ChatMessage({ role, text, status, source, fallbackReason, pendingEdit, applied, onApply, onRetry }) {
   const [copied, setCopied] = useState(false);
 
   function copyText() {
@@ -17,7 +17,14 @@ export default function ChatMessage({ role, text, status, source, pendingEdit, a
       <span className="chat-msg__author">
         {role === "user" ? "You" : "Assistant"}
         {role === "ai" && source === "llm" && <span className="chat-msg__source chat-msg__source--llm">Live AI</span>}
-        {role === "ai" && source === "local" && <span className="chat-msg__source">Local engine</span>}
+        {role === "ai" && source === "local" && (
+          <span
+            className={`chat-msg__source ${fallbackReason ? "chat-msg__source--fallback" : ""}`}
+            title={fallbackReason ? `Live AI was attempted but failed: ${fallbackReason}. Used the local rule-based engine instead.` : "No LLM key configured — using the local rule-based engine."}
+          >
+            Local engine{fallbackReason ? " ⚠" : ""}
+          </span>
+        )}
       </span>
       <p>{text}</p>
       {pendingEdit && (

@@ -505,6 +505,12 @@
   color: #78d6ac;
 }
 
+.chat-msg__source--fallback {
+  background: #3d3319;
+  color: #e0b978;
+  cursor: help;
+}
+
 .chat-msg--user {
   align-self: flex-end;
   max-width: 88%;
@@ -1888,6 +1894,13 @@
   padding: 9px 10px;
 }
 
+.publish-modal__url-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 .publish-modal__url-row,
 .import-export__feedback {
   border-radius: 10px;
@@ -1898,6 +1911,11 @@
 
 .publish-modal__url {
   color: #8ba3ff;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
 }
 
 .publish-modal__detail {

@@ -144,6 +144,7 @@ export default function AssistantPanel({ onCloseSidebar }) {
                 text={msg.text}
                 status={msg.status}
                 source={msg.source}
+                fallbackReason={msg.fallbackReason}
                 pendingEdit={msg.pendingEdit}
                 applied={msg.applied}
                 onApply={() => applyPendingEdit(msg.id)}

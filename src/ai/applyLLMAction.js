@@ -1,5 +1,6 @@
 import { withMutatedNode, withDocument, parseFragment } from "../utils/domIds.js";
 import { setBrandColor, shadeHex } from "./colors.js";
+import { applyImageAsset } from "./applyAction.js";
 
 /**
  * Applies a sanitized structured action returned by the live LLM edit
@@ -7,17 +8,25 @@ import { setBrandColor, shadeHex } from "./colors.js";
  * Mirrors applyAction.js's shape ({ html, css, summary }) so both the local
  * rule-based engine and the live LLM path plug into the same reducer flow.
  */
-export function applyLLMAction(action, { html, css, selectedElement }) {
+export function applyLLMAction(action, { html, css, selectedElement, assets }) {
   if (!action) return null;
 
+  const matchedAsset =
+    action.imageAssetName && assets
+      ? assets.find((a) => a.name.toLowerCase() === action.imageAssetName.toLowerCase())
+      : null;
+
   const hasRequestedEffect =
-    action.remove || action.textReplacement || action.brandColorHex || Object.keys(action.styleChanges || {}).length > 0;
+    action.remove || action.textReplacement || action.brandColorHex || matchedAsset || Object.keys(action.styleChanges || {}).length > 0;
   if (!hasRequestedEffect) return null;
 
   const mutate = (el) => {
     if (action.remove) {
       el.remove();
       return;
+    }
+    if (matchedAsset) {
+      applyImageAsset(el, matchedAsset);
     }
     if (action.textReplacement) {
       el.textContent = action.textReplacement;

@@ -75,6 +75,7 @@ export function ProjectProvider({ children }) {
           prompt: text,
           files: { html: project.files["index.html"], css: project.files["styles.css"] },
           selectedElement: project.selectedElement,
+          assets: project.assets,
         });
 
         const aiMessage = {
@@ -83,6 +84,7 @@ export function ProjectProvider({ children }) {
           text: planOnly && result.files ? `Plan: ${result.reply}` : result.reply,
           status: result.files ? "success" : "info",
           source: result.source,
+          fallbackReason: result.fallbackReason || null,
           timestamp: Date.now(),
           pendingEdit: planOnly && result.files ? { files: result.files, summary: result.summary } : null,
           applied: false,
@@ -107,7 +109,7 @@ export function ProjectProvider({ children }) {
         setIsThinking(false);
       }
     },
-    [project.files, project.selectedElement, project.editorState.chatMode]
+    [project.files, project.selectedElement, project.editorState.chatMode, project.assets]
   );
 
   const applyPendingEdit = useCallback((messageId) => {

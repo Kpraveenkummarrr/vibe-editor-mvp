@@ -74,6 +74,11 @@ export function sanitizeAction(raw) {
     textReplacement:
       typeof raw.textReplacement === "string" && raw.textReplacement.trim() ? raw.textReplacement.trim().slice(0, 300) : null,
     brandColorHex: typeof raw.brandColorHex === "string" && /^#[0-9a-fA-F]{3,8}$/.test(raw.brandColorHex) ? raw.brandColorHex : null,
+    // Deliberately a NAME, never image data — the model only ever sees the
+    // list of uploaded asset filenames (see buildMessages), never the actual
+    // base64. The client resolves the name back to the real dataUrl locally.
+    imageAssetName:
+      typeof raw.imageAssetName === "string" && raw.imageAssetName.trim() ? raw.imageAssetName.trim().slice(0, 120) : null,
     styleChanges: {},
   };
 
@@ -86,7 +91,7 @@ export function sanitizeAction(raw) {
   }
 
   const hasEffect =
-    action.remove || action.textReplacement || action.brandColorHex || Object.keys(action.styleChanges).length > 0;
+    action.remove || action.textReplacement || action.brandColorHex || action.imageAssetName || Object.keys(action.styleChanges).length > 0;
 
   return hasEffect ? action : null;
 }
@@ -99,7 +104,27 @@ function extractJson(text) {
   return trimmed.slice(start, end + 1);
 }
 
-function buildMessages({ prompt, selectedElement, html, css }) {
+/**
+ * Best-effort recovery for a response cut off by max_tokens mid-string or
+ * mid-object (e.g. a long styleChanges.backgroundImage gradient value that
+ * ran past the token budget). Only closes structure that's still open —
+ * never invents field values — so a near-complete action can still be
+ * salvaged instead of the whole edit being discarded on a technicality.
+ */
+function repairTruncatedJson(text) {
+  let repaired = text;
+  let quoteCount = 0;
+  for (let i = 0; i < repaired.length; i += 1) {
+    if (repaired[i] === '"' && repaired[i - 1] !== "\\") quoteCount += 1;
+  }
+  if (quoteCount % 2 === 1) repaired += '"';
+  const opens = (repaired.match(/\{/g) || []).length;
+  const closes = (repaired.match(/\}/g) || []).length;
+  repaired += "}".repeat(Math.max(0, opens - closes));
+  return repaired;
+}
+
+function buildMessages({ prompt, selectedElement, html, css, assetNames }) {
   const system = `You are the editing engine inside "Vibe Editor", a visual website builder. A user is editing a live HTML/CSS page and describes a change in plain English. Respond with ONLY one JSON object (no markdown fences, no commentary before or after) matching exactly this shape:
 {
   "reply": string (<=160 chars, friendly, present tense, describes what you changed),
@@ -108,9 +133,10 @@ function buildMessages({ prompt, selectedElement, html, css }) {
   "remove": boolean (true ONLY if the user explicitly asked to remove/delete the target),
   "textReplacement": string | null (new text content, ONLY if the user asked to change/shorten/rewrite text),
   "brandColorHex": string | null (a hex color, ONLY for page-wide brand/theme color requests such as "use a darker green"),
+  "imageAssetName": string | null (the EXACT filename from "Uploaded images available" below, ONLY if the user asked to use/insert/replace an image and one of those filenames is a plausible match; null if they mention an image but none of the available filenames fit — never invent a filename),
   "styleChanges": object | null (inline style properties to set on the target element, camelCase keys; allowed keys: ${ALLOWED_STYLE_PROPS.join(", ")})
 }
-Only set fields relevant to the request; use null/{} otherwise. Never invent new HTML elements or return raw HTML/CSS text — only structured values from the shape above. Keep styleChanges minimal (1-4 properties) and tasteful.`;
+Only set fields relevant to the request; use null/{} otherwise. Never invent new HTML elements or return raw HTML/CSS text — only structured values from the shape above. Never put image data/URLs in styleChanges or textReplacement — that's what imageAssetName is for. Keep styleChanges minimal (1-4 properties) and tasteful.`;
 
   const context = selectedElement
     ? `The user has selected this element: <${selectedElement.tag}>${
@@ -118,10 +144,15 @@ Only set fields relevant to the request; use null/{} otherwise. Never invent new
       }. Prefer scope "element" and leave targetHint null.`
     : `No element is selected. Infer the most relevant target from the page HTML and set scope "page" with a targetHint CSS selector (or set brandColorHex for a page-wide color change).`;
 
-  const user = `User request: "${prompt}"\n\n${context}\n\nCurrent page HTML:\n${html.slice(0, 4000)}\n\nCurrent page CSS:\n${css.slice(
+  const assetContext =
+    assetNames && assetNames.length
+      ? `Uploaded images available (reference by exact filename in imageAssetName, never invent one): ${assetNames.join(", ")}`
+      : `No images have been uploaded yet — if the user asks to use/insert an image, leave imageAssetName null and say so in "reply".`;
+
+  const user = `User request: "${prompt}"\n\n${context}\n\n${assetContext}\n\nCurrent page HTML:\n${html.slice(
     0,
-    3000
-  )}`;
+    4000
+  )}\n\nCurrent page CSS:\n${css.slice(0, 3000)}`;
 
   return [
     { role: "system", content: system },
@@ -132,14 +163,14 @@ Only set fields relevant to the request; use null/{} otherwise. Never invent new
 /**
  * @returns {Promise<{ok: true, action: object, model: string} | {ok: false, error: string, detail?: string}>}
  */
-export async function requestAiEdit({ prompt, selectedElement, html, css }, env = process.env) {
+export async function requestAiEdit({ prompt, selectedElement, html, css, assetNames }, env = process.env) {
   const apiKey = env.OPENROUTER_API_KEY;
   if (!apiKey) {
     return { ok: false, error: "not_configured" };
   }
 
   const model = env.OPENROUTER_MODEL || DEFAULT_MODEL;
-  const messages = buildMessages({ prompt, selectedElement, html, css });
+  const messages = buildMessages({ prompt, selectedElement, html, css, assetNames });
 
   let response;
   try {
@@ -151,7 +182,7 @@ export async function requestAiEdit({ prompt, selectedElement, html, css }, env 
         "HTTP-Referer": env.PUBLIC_APP_URL || "https://vibe-editor-mvp.vercel.app",
         "X-Title": "Vibe Editor",
       },
-      body: JSON.stringify({ model, messages, temperature: 0.4, max_tokens: 400 }),
+      body: JSON.stringify({ model, messages, temperature: 0.4, max_tokens: 900 }),
     });
   } catch (err) {
     return { ok: false, error: "network_error", detail: err.message };
@@ -170,7 +201,11 @@ export async function requestAiEdit({ prompt, selectedElement, html, css }, env 
   try {
     parsed = JSON.parse(extractJson(content));
   } catch {
-    return { ok: false, error: "invalid_json", detail: content.slice(0, 300) };
+    try {
+      parsed = JSON.parse(repairTruncatedJson(extractJson(content)));
+    } catch {
+      return { ok: false, error: "invalid_json", detail: content.slice(0, 300) };
+    }
   }
 
   const action = sanitizeAction(parsed);

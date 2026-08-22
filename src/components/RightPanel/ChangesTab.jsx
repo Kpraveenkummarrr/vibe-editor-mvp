@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useProject } from "../../state/ProjectContext.jsx";
 import { EmptyState } from "../ui/Primitives.jsx";
 import Button from "../ui/Button.jsx";
@@ -21,6 +22,22 @@ function diffSize(change) {
 
 export default function ChangesTab() {
   const { project, dispatch } = useProject();
+  // History replaces the whole workspace view (see App.jsx) — Preview isn't
+  // visible while you're on this tab. Restoring only updated project.files
+  // under the hood, so from here it looked like clicking Restore "did
+  // nothing" even though it worked. Track which change we just restored so
+  // we can confirm it inline, and jump back to Preview so the result is
+  // actually visible instead of requiring a manual tab switch.
+  const [justRestoredId, setJustRestoredId] = useState(null);
+
+  function handleRestore(change) {
+    if (!window.confirm(`Restore this version ("${change.summary}")? This adds a new checkpoint — nothing is deleted.`)) return;
+    dispatch({ type: "RESTORE_VERSION", changeId: change.id });
+    setJustRestoredId(change.id);
+    setTimeout(() => {
+      dispatch({ type: "SET_RIGHT_TAB", tab: "preview" });
+    }, 550);
+  }
 
   return (
     <div className="changes-tab">
@@ -58,13 +75,9 @@ export default function ChangesTab() {
                     <Button
                       size="sm"
                       variant="ghost"
-                      onClick={() => {
-                        if (window.confirm(`Restore this version ("${change.summary}")? This adds a new checkpoint — nothing is deleted.`)) {
-                          dispatch({ type: "RESTORE_VERSION", changeId: change.id });
-                        }
-                      }}
+                      onClick={() => handleRestore(change)}
                     >
-                      Restore
+                      {justRestoredId === change.id ? "Restored ✓ — opening preview…" : "Restore"}
                     </Button>
                   )}
                 </li>

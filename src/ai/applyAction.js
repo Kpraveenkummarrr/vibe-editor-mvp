@@ -23,6 +23,28 @@ function findTarget(body, selectedVibeId, fallbackSelector) {
 }
 
 /**
+ * Swaps an uploaded asset into a target element: replaces the src of an
+ * <img> if the target IS one or contains one, otherwise sets it as a
+ * cover/centered background-image. `asset.dataUrl` is our own trusted data
+ * (came from the user's own file upload via FilesTab, not from model text),
+ * so this intentionally bypasses the 200-char CSS-value cap in
+ * api/_lib/openrouter.js — that cap exists to stop an LLM from inventing
+ * arbitrary long values, not to block a real, user-provided image.
+ */
+export function applyImageAsset(el, asset) {
+  const img = el.tagName === "IMG" ? el : el.querySelector("img");
+  if (img) {
+    img.setAttribute("src", asset.dataUrl);
+    if (!img.getAttribute("alt")) img.setAttribute("alt", asset.name.replace(/\.[a-z0-9]+$/i, ""));
+    return "img";
+  }
+  el.style.backgroundImage = `url("${asset.dataUrl}")`;
+  el.style.backgroundSize = "cover";
+  el.style.backgroundPosition = "center";
+  return "background";
+}
+
+/**
  * Applies a classified intent against the current project files.
  * Returns { html, css, summary } on success, or null if the intent could
  * not be applied at all (e.g. no target found).
@@ -137,6 +159,33 @@ export function applyIntent(intent, { html, css, selectedVibeId, targetSelector 
         el.style.borderRadius = "20px";
       });
       return { html: nextHtml, css, summary: "Rounded the corners" };
+    }
+
+    case "style_font": {
+      const nextHtml = withDocument(html, (body) => {
+        const el = findTarget(body, selectedVibeId, targetSelector);
+        if (!el) return;
+        el.style.fontFamily = "'Georgia', 'Times New Roman', serif";
+      });
+      return { html: nextHtml, css, summary: "Updated the font on the selected element" };
+    }
+
+    case "image_use": {
+      // intent.asset is resolved upstream in engine.js's runLocalEngine,
+      // which has access to project.assets — applyIntent itself stays
+      // asset-source-agnostic so the same case shape works for both the
+      // local engine and (via applyLLMAction.js) the live LLM path.
+      if (!intent.asset) return null;
+      const nextHtml = withDocument(html, (body) => {
+        const el = findTarget(body, selectedVibeId, targetSelector);
+        if (!el) return;
+        applyImageAsset(el, intent.asset);
+      });
+      const check = parseFragment(nextHtml);
+      assignVibeIds(check);
+      const changed = findTarget(check, selectedVibeId, targetSelector);
+      if (!changed) return null;
+      return { html: nextHtml, css, summary: `Used the uploaded image "${intent.asset.name}"` };
     }
 
     case "spacing_increase": {

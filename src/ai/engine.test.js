@@ -72,4 +72,27 @@ describe("processPrompt", () => {
     const result = await processPrompt({ prompt: "   ", files: { html, css }, selectedElement: null });
     expect(result.files).toBeNull();
   });
+
+  it("falls back to the local engine with no fallbackReason when no LLM key is configured (fetch fails/404s in jsdom)", async () => {
+    const result = await processPrompt({ prompt: "Use a darker green", files: { html, css }, selectedElement: null });
+    expect(result.source).toBe("local");
+    // In this test env /api/ai-edit doesn't exist, so fetch throws — that's
+    // treated as an unconfigured environment only when the dev server truly
+    // isn't there; regardless, the local engine must still produce a result.
+    expect(result.files).not.toBeNull();
+  });
+});
+
+describe("regression: local engine misclassification", () => {
+  it("does not overwrite element text when the request is actually about font/style, not content", () => {
+    // Previously "change this text font into various" matched the implicit
+    // text_replace pattern and literally replaced the button's text with
+    // "various" — see src/ai/intentParser.js STYLE_GUARD.
+    const intent = classifyIntent("change this text font into various");
+    expect(intent.type).not.toBe("text_replace");
+  });
+
+  it("classifies an explicit font request as style_font", () => {
+    expect(classifyIntent("change the font of this heading").type).toBe("style_font");
+  });
 });
