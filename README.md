@@ -76,16 +76,22 @@ you can still use "Download HTML" to get the same file to host anywhere yourself
    ("make this more premium", "shorten the headline", "use a darker green"). Toggle
    **Build** (applies immediately) vs **Plan** (the assistant proposes the change as
    text first; you click "Apply this change" to actually run it) above the input.
-2. The request is sent to `/api/ai-edit`. If a live model is configured, it returns a
-   small structured JSON action (target hint, text replacement, style changes, brand
-   color, reply) — validated and sanitized server-side against an allow-list before
-   ever reaching the browser (see `api/_lib/openrouter.js`). Otherwise (or if that call
-   fails for any reason), `src/ai/intentParser.js` classifies the request locally into
-   one of a fixed set of intents instead.
-3. Either way, the action is applied against the current HTML/CSS — targeting the
-   selected element (via a stable `data-vibe-id` re-derived from the stored HTML, see
-   `utils/domIds.js`) or a sensible page-wide fallback — by `ai/applyLLMAction.js` or
-   `ai/applyAction.js` respectively.
+2. The request is sent to `/api/ai-edit` along with the CURRENT full page HTML
+   (annotated with stable `data-vibe-id` markers, see `utils/domIds.js`) and CSS. If a
+   live model is configured, it reads that code and the user's instruction — in any
+   language, about anything — and returns the COMPLETE updated HTML and/or CSS
+   directly, the way a developer would edit the files, not a menu of predefined edit
+   types (see `api/_lib/openrouter.js`). Sanitized server-side (dangerous tags/
+   attributes/CSS rejected) before ever reaching the browser. Only if no key is
+   configured, or the call fails for any reason, does `src/ai/intentParser.js` classify
+   the request locally into one of a fixed set of intents instead — a necessarily
+   simpler, deterministic, offline-only fallback (there's no model to ask without a
+   network call), not a substitute for the live path's real understanding.
+3. Either way, the result is applied against the current HTML/CSS/script.js by
+   `ai/applyLLMAction.js` (live path — re-sanitizes the returned HTML with a real
+   DOM tree-walk, resolves any `vibe-asset:` image-filename references against the
+   user's actual uploaded assets, and wires up `onClickAlert` if requested) or
+   `ai/applyAction.js` (local fallback engine) respectively.
 4. The result updates `files["index.html"]`/`files["styles.css"]` in the central
    project state and records a full **version** (snapshot before + after) in
    `project.changes`, viewable and restorable from the History tab.
@@ -103,7 +109,8 @@ api/
   ai-status.js         Vercel function: reports whether a live AI key is configured (GET)
   publish.js            Vercel function: deploys the built page to Netlify (POST)
   publish-status.js      Vercel function: reports whether a Netlify token is configured (GET)
-  _lib/openrouter.js  Prompt building, model call, response sanitization (shared)
+  _lib/openrouter.js  Prompt building (full HTML/CSS in, full HTML/CSS out), model
+                      call, response sanitization — shared by both providers
   _lib/netlify.js      Site creation + zip deploy via the Netlify API (shared)
 
 src/
@@ -148,14 +155,41 @@ project menu in the top bar).
 
 ## Safety notes on the live AI path
 
-The model never returns or writes raw HTML/CSS/JS directly — only a small structured
-action (a CSS selector hint, plain text, a hex color, and a handful of inline style
-properties from a fixed allow-list). `api/_lib/openrouter.js` validates every field
-server-side (rejecting `javascript:`/`expression()`/arbitrary `url()` values, capping
-string lengths) before it's sent to the browser, and `src/ai/applyLLMAction.js`
-re-validates the target exists before mutating anything. This keeps the live path as
-safe as the local rule-based engine while allowing far more flexible language
-understanding.
+The model can write real HTML and CSS — there's no fixed catalog of edit types it's
+limited to — but it never gets to write or execute raw JavaScript, and it never
+touches `script.js` directly:
+
+- **HTML**: `api/_lib/openrouter.js` rejects an obviously unsafe response
+  (`<script>`, event-handler attributes, `javascript:` URLs) server-side before it
+  ever reaches the browser. The authoritative check is client-side, in
+  `src/ai/applyLLMAction.js`: the returned HTML is parsed into a real DOM tree
+  (`src/utils/domIds.js`'s `sanitizeHtmlFragment`) and walked recursively, stripping
+  any disallowed tag (`<script>`, `<style>`, `<link>`, `<iframe>`, `<object>`,
+  `<embed>`, `<form>`, `<input>`, and a few others) or attribute (any `on*` handler,
+  any `javascript:` href/src) regardless of what passed the server-side check —
+  string matching alone is never trusted as sufficient.
+- **CSS**: rejected outright server-side if it contains `<script`, `javascript:`,
+  `expression(`, or `@import` (the last one blocks it from loading a remote
+  stylesheet/tracker).
+- **Images**: the model never sees or invents real image data — only the filenames
+  of assets the user actually uploaded. It references one with a
+  `vibe-asset:EXACT_FILENAME` placeholder anywhere in its HTML/CSS output;
+  `applyLLMAction.js` resolves that against the real uploaded asset client-side
+  (dropping the reference entirely if the name doesn't match — never left as a
+  dangling fake URL).
+- **Interactivity**: the one narrow exception to "no JS" is `onClickAlert` — the
+  model can request a plain text message to show via `alert()` when a specific
+  element (referenced by its `data-vibe-id`) is clicked. It never gets to write the
+  JavaScript itself — the message is just a string, and `applyLLMAction.js` builds
+  the actual `addEventListener(...)` snippet from a fixed template
+  (`JSON.stringify`-escaped, so the string can't break out into code), then appends
+  it to `script.js`. There is no general "run this JS" field, and forms/inputs stay
+  blocked entirely (see HTML rule above) — no contact-form generation, by design.
+
+None of this is prompt-keyword matching or a per-request-type handler — the model is
+free to decide what the HTML/CSS should become for any instruction; these are output
+validation rules (what kind of *content* is allowed through), not rules about what
+kind of *request* is allowed.
 
 ## Notes
 

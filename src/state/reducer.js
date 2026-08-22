@@ -189,7 +189,16 @@ export function reducer(workspace, action) {
     case "APPLY_AI_EDIT": {
       return mapActiveProject(workspace, activeId, (p) => {
         const snapshotBefore = { ...p.files };
-        const nextFiles = { ...p.files, "index.html": action.files.html, "styles.css": action.files.css };
+        const nextFiles = {
+          ...p.files,
+          "index.html": action.files.html,
+          "styles.css": action.files.css,
+          // Only the live LLM path (onClickAlert) ever produces a "script.js"
+          // change; the local engine and manual edits don't touch it here,
+          // so leave the existing file alone unless a new value was actually
+          // returned — never blank out the user's script.js by accident.
+          ...(action.files.js !== undefined ? { "script.js": action.files.js } : {}),
+        };
         const change = {
           id: nextId("chg"),
           summary: action.summary,

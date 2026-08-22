@@ -6,7 +6,7 @@ export default async function handler(req, res) {
     return;
   }
 
-  const { prompt, selectedElement, html, css, assetNames } = req.body || {};
+  const { prompt, selectedElement, html, css, js, assetNames } = req.body || {};
   if (typeof prompt !== "string" || !prompt.trim() || typeof html !== "string" || typeof css !== "string") {
     res.status(400).json({ ok: false, error: "bad_request" });
     return;
@@ -25,6 +25,7 @@ export default async function handler(req, res) {
     selectedElement: selectedElement || null,
     html,
     css,
+    js: typeof js === "string" ? js : "",
     assetNames: Array.isArray(assetNames) ? assetNames.slice(0, 30) : [],
   });
   res.status(200).json(result);

@@ -73,7 +73,11 @@ export function ProjectProvider({ children }) {
       try {
         const result = await processPrompt({
           prompt: text,
-          files: { html: project.files["index.html"], css: project.files["styles.css"] },
+          files: {
+            html: project.files["index.html"],
+            css: project.files["styles.css"],
+            js: project.files["script.js"],
+          },
           selectedElement: project.selectedElement,
           assets: project.assets,
         });

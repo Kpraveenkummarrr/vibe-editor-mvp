@@ -39,6 +39,7 @@ function apiDevPlugin() {
               selectedElement: body.selectedElement || null,
               html: body.html || "",
               css: body.css || "",
+              js: body.js || "",
               assetNames: Array.isArray(body.assetNames) ? body.assetNames.slice(0, 30) : [],
             });
             sendJson(res, 200, result);
