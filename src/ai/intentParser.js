@@ -54,6 +54,10 @@ export function classifyIntent(promptRaw) {
     return { type: "style_font" };
   }
 
+  if (/gradient/.test(prompt)) {
+    return { type: "background_gradient", colorWord: findColorWord(prompt) };
+  }
+
   if (/(image|photo|picture|logo|upload|thumbnail)/.test(prompt)) {
     return { type: "image_use" };
   }
@@ -119,6 +123,7 @@ export function heuristicTargetSelector(intentType) {
     case "style_premium":
     case "style_modern":
     case "spacing_increase":
+    case "background_gradient":
       return "[data-vibe-section='hero'], .hero";
     case "image_use":
       return "[data-vibe-section='hero'] img, .hero img, [data-vibe-section='hero'], .hero";

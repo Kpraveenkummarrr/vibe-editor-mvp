@@ -1,4 +1,4 @@
-import { publishProject } from "./_lib/netlify.js";
+import { publishProject } from "./_lib/vercel.js";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {

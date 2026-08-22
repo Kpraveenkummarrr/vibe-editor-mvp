@@ -43,6 +43,63 @@ export function findByVibeId(rootEl, vibeId) {
   return rootEl.querySelector(`[data-vibe-id="${vibeId}"]`);
 }
 
+// Tags that can never appear in LLM-generated HTML we insert into the page —
+// script execution, style/link injection into the page-wide cascade, and
+// embeds/forms that could exfiltrate data or phish.
+const DISALLOWED_TAGS = new Set([
+  "SCRIPT",
+  "STYLE",
+  "LINK",
+  "IFRAME",
+  "OBJECT",
+  "EMBED",
+  "FORM",
+  "INPUT",
+  "TEXTAREA",
+  "SELECT",
+  "OPTION",
+  "BASE",
+  "META",
+  "svg", // blocked to avoid <svg><script> smuggling; images should use <img> instead
+]);
+
+/**
+ * Sanitizes an arbitrary HTML fragment (as returned by the live LLM's
+ * `htmlReplace` field — see applyLLMAction.js) by walking the parsed DOM
+ * tree and removing anything dangerous: disallowed tags outright, all
+ * event-handler attributes (onclick, onerror, ...), and javascript: URLs in
+ * href/src. This is real DOM-based sanitization, not a string/regex filter —
+ * the model's raw text response is never trusted or inserted as-is.
+ */
+export function sanitizeHtmlFragment(html) {
+  const doc = new DOMParser().parseFromString(html || "", "text/html");
+  const body = doc.body;
+
+  function clean(node) {
+    // Iterate a snapshot array, not the live children collection — removing
+    // a child while iterating the live collection skips the next sibling.
+    for (const child of Array.from(node.children)) {
+      if (DISALLOWED_TAGS.has(child.tagName)) {
+        child.remove();
+        continue;
+      }
+      for (const attr of Array.from(child.attributes)) {
+        const name = attr.name.toLowerCase();
+        const value = attr.value || "";
+        if (name.startsWith("on")) {
+          child.removeAttribute(attr.name);
+        } else if ((name === "href" || name === "src") && /^\s*javascript:/i.test(value)) {
+          child.removeAttribute(attr.name);
+        }
+      }
+      clean(child);
+    }
+  }
+
+  clean(body);
+  return body.innerHTML;
+}
+
 /**
  * Builds an id-annotated copy of the stored HTML for use inside the preview
  * iframe. Returns the annotated HTML string.

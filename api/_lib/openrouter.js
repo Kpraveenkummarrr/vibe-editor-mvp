@@ -14,6 +14,10 @@ const DEFAULT_MODEL = "poolside/laguna-s-2.1:free";
 export const ALLOWED_STYLE_PROPS = [
   "color",
   "backgroundColor",
+  "backgroundImage",
+  "backgroundSize",
+  "backgroundPosition",
+  "backgroundRepeat",
   "padding",
   "paddingTop",
   "paddingBottom",
@@ -63,6 +67,20 @@ function isSafeCssValue(value) {
  * fields/values our client applier understands. Returns null if the result
  * has no usable effect at all.
  */
+const DANGEROUS_HTML_PATTERN = /<script|<style|<link|<iframe|<object|<embed|<form|javascript:|on\w+\s*=/i;
+
+function sanitizeHtmlReplaceField(value) {
+  if (typeof value !== "string" || !value.trim()) return null;
+  const trimmed = value.trim().slice(0, 6000);
+  // Reject outright rather than trying to strip-and-salvage here — the real,
+  // authoritative sanitization is the DOM-based tree walk in
+  // src/utils/domIds.js's sanitizeHtmlFragment, which runs unconditionally
+  // on the client regardless of what passes this check. This is just a
+  // cheap early filter so obviously-bad content doesn't even leave the server.
+  if (DANGEROUS_HTML_PATTERN.test(trimmed)) return null;
+  return trimmed;
+}
+
 export function sanitizeAction(raw) {
   if (!raw || typeof raw !== "object") return null;
 
@@ -79,6 +97,7 @@ export function sanitizeAction(raw) {
     // base64. The client resolves the name back to the real dataUrl locally.
     imageAssetName:
       typeof raw.imageAssetName === "string" && raw.imageAssetName.trim() ? raw.imageAssetName.trim().slice(0, 120) : null,
+    htmlReplace: sanitizeHtmlReplaceField(raw.htmlReplace),
     styleChanges: {},
   };
 
@@ -91,12 +110,17 @@ export function sanitizeAction(raw) {
   }
 
   const hasEffect =
-    action.remove || action.textReplacement || action.brandColorHex || action.imageAssetName || Object.keys(action.styleChanges).length > 0;
+    action.remove ||
+    action.textReplacement ||
+    action.brandColorHex ||
+    action.imageAssetName ||
+    action.htmlReplace ||
+    Object.keys(action.styleChanges).length > 0;
 
   return hasEffect ? action : null;
 }
 
-function extractJson(text) {
+export function extractJson(text) {
   const trimmed = text.trim();
   const start = trimmed.indexOf("{");
   const end = trimmed.lastIndexOf("}");
@@ -111,7 +135,7 @@ function extractJson(text) {
  * never invents field values — so a near-complete action can still be
  * salvaged instead of the whole edit being discarded on a technicality.
  */
-function repairTruncatedJson(text) {
+export function repairTruncatedJson(text) {
   let repaired = text;
   let quoteCount = 0;
   for (let i = 0; i < repaired.length; i += 1) {
@@ -124,8 +148,8 @@ function repairTruncatedJson(text) {
   return repaired;
 }
 
-function buildMessages({ prompt, selectedElement, html, css, assetNames }) {
-  const system = `You are the editing engine inside "Vibe Editor", a visual website builder. A user is editing a live HTML/CSS page and describes a change in plain English. Respond with ONLY one JSON object (no markdown fences, no commentary before or after) matching exactly this shape:
+export function buildSystemPrompt() {
+  return `You are the editing engine inside "Vibe Editor", a visual website builder. A user is editing a live HTML/CSS page and describes a change in plain English. Respond with ONLY one JSON object (no markdown fences, no commentary before or after) matching exactly this shape:
 {
   "reply": string (<=160 chars, friendly, present tense, describes what you changed),
   "scope": "element" | "page",
@@ -134,10 +158,13 @@ function buildMessages({ prompt, selectedElement, html, css, assetNames }) {
   "textReplacement": string | null (new text content, ONLY if the user asked to change/shorten/rewrite text),
   "brandColorHex": string | null (a hex color, ONLY for page-wide brand/theme color requests such as "use a darker green"),
   "imageAssetName": string | null (the EXACT filename from "Uploaded images available" below, ONLY if the user asked to use/insert/replace an image and one of those filenames is a plausible match; null if they mention an image but none of the available filenames fit — never invent a filename),
+  "htmlReplace": string | null (a small HTML fragment to REPLACE THE INSIDE of the target element — use this ONLY when nothing else in this schema can express the request: adding new elements, a list of testimonials/features/cards, restructuring content, adding a whole new block. Plain semantic tags only: div, section, h1-h6, p, span, ul, ol, li, img, a, button, strong, em, br. NEVER include <script>, <style>, <link>, <iframe>, <object>, <embed>, <form>, event-handler attributes like onclick, or javascript: URLs — these get stripped anyway, so including them wastes your response. Prefer the other fields above when they can express the request; only use htmlReplace for things they genuinely cannot.)
   "styleChanges": object | null (inline style properties to set on the target element, camelCase keys; allowed keys: ${ALLOWED_STYLE_PROPS.join(", ")})
 }
 Only set fields relevant to the request; use null/{} otherwise. Never invent new HTML elements or return raw HTML/CSS text — only structured values from the shape above. Never put image data/URLs in styleChanges or textReplacement — that's what imageAssetName is for. Keep styleChanges minimal (1-4 properties) and tasteful.`;
+}
 
+export function buildUserPrompt({ prompt, selectedElement, html, css, assetNames }) {
   const context = selectedElement
     ? `The user has selected this element: <${selectedElement.tag}>${
         selectedElement.text ? ` with text "${selectedElement.text}"` : ""
@@ -149,14 +176,16 @@ Only set fields relevant to the request; use null/{} otherwise. Never invent new
       ? `Uploaded images available (reference by exact filename in imageAssetName, never invent one): ${assetNames.join(", ")}`
       : `No images have been uploaded yet — if the user asks to use/insert an image, leave imageAssetName null and say so in "reply".`;
 
-  const user = `User request: "${prompt}"\n\n${context}\n\n${assetContext}\n\nCurrent page HTML:\n${html.slice(
+  return `User request: "${prompt}"\n\n${context}\n\n${assetContext}\n\nCurrent page HTML:\n${html.slice(
     0,
     4000
   )}\n\nCurrent page CSS:\n${css.slice(0, 3000)}`;
+}
 
+function buildMessages(input) {
   return [
-    { role: "system", content: system },
-    { role: "user", content: user },
+    { role: "system", content: buildSystemPrompt() },
+    { role: "user", content: buildUserPrompt(input) },
   ];
 }
 

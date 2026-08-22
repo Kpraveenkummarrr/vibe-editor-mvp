@@ -1,4 +1,4 @@
-import { requestAiEdit } from "./_lib/openrouter.js";
+import { requestLiveEdit } from "./_lib/aiRouter.js";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -20,7 +20,7 @@ export default async function handler(req, res) {
     return;
   }
 
-  const result = await requestAiEdit({
+  const result = await requestLiveEdit({
     prompt,
     selectedElement: selectedElement || null,
     html,

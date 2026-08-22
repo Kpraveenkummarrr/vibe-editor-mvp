@@ -26,15 +26,15 @@ function apiDevPlugin() {
       server.middlewares.use(async (req, res, next) => {
         try {
           if (req.method === "GET" && req.url === "/api/ai-status") {
-            const { getAiStatus } = await import("./api/_lib/openrouter.js");
-            sendJson(res, 200, getAiStatus());
+            const { getAiProvidersStatus } = await import("./api/_lib/aiRouter.js");
+            sendJson(res, 200, getAiProvidersStatus());
             return;
           }
 
           if (req.method === "POST" && req.url === "/api/ai-edit") {
             const body = await readJsonBody(req);
-            const { requestAiEdit } = await import("./api/_lib/openrouter.js");
-            const result = await requestAiEdit({
+            const { requestLiveEdit } = await import("./api/_lib/aiRouter.js");
+            const result = await requestLiveEdit({
               prompt: body.prompt,
               selectedElement: body.selectedElement || null,
               html: body.html || "",
@@ -46,14 +46,14 @@ function apiDevPlugin() {
           }
 
           if (req.method === "GET" && req.url === "/api/publish-status") {
-            const { getPublishStatus } = await import("./api/_lib/netlify.js");
+            const { getPublishStatus } = await import("./api/_lib/vercel.js");
             sendJson(res, 200, getPublishStatus());
             return;
           }
 
           if (req.method === "POST" && req.url === "/api/publish") {
             const body = await readJsonBody(req);
-            const { publishProject } = await import("./api/_lib/netlify.js");
+            const { publishProject } = await import("./api/_lib/vercel.js");
             const result = await publishProject({
               projectName: body.projectName || "vibe-editor-site",
               siteId: body.siteId || null,
