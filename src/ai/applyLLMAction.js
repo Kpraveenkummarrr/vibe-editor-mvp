@@ -1,4 +1,4 @@
-import { withMutatedNode, withDocument, parseFragment } from "../utils/domIds.js";
+import { withMutatedNode, withDocument, parseFragment, sanitizeHtmlFragment } from "../utils/domIds.js";
 import { setBrandColor, shadeHex } from "./colors.js";
 import { applyImageAsset } from "./applyAction.js";
 
@@ -17,7 +17,12 @@ export function applyLLMAction(action, { html, css, selectedElement, assets }) {
       : null;
 
   const hasRequestedEffect =
-    action.remove || action.textReplacement || action.brandColorHex || matchedAsset || Object.keys(action.styleChanges || {}).length > 0;
+    action.remove ||
+    action.textReplacement ||
+    action.brandColorHex ||
+    matchedAsset ||
+    action.htmlReplace ||
+    Object.keys(action.styleChanges || {}).length > 0;
   if (!hasRequestedEffect) return null;
 
   const mutate = (el) => {
@@ -30,6 +35,13 @@ export function applyLLMAction(action, { html, css, selectedElement, assets }) {
     }
     if (action.textReplacement) {
       el.textContent = action.textReplacement;
+    }
+    if (action.htmlReplace) {
+      // sanitizeHtmlFragment does the actual, authoritative security work
+      // here (real DOM tree-walking, not string matching) — the server's
+      // sanitizeHtmlReplaceField check is only a cheap early filter, never
+      // trust its pass as sufficient on its own.
+      el.innerHTML = sanitizeHtmlFragment(action.htmlReplace);
     }
     for (const [prop, value] of Object.entries(action.styleChanges || {})) {
       try {

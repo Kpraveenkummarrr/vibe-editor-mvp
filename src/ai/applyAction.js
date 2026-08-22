@@ -170,6 +170,23 @@ export function applyIntent(intent, { html, css, selectedVibeId, targetSelector 
       return { html: nextHtml, css, summary: "Updated the font on the selected element" };
     }
 
+    case "background_gradient": {
+      const hex = COLOR_WORDS[intent.colorWord] || COLOR_WORDS.blue;
+      const hexLight = shadeHex(hex, 0.4);
+      const nextHtml = withDocument(html, (body) => {
+        const el = findTarget(body, selectedVibeId, targetSelector);
+        if (!el) return;
+        el.style.backgroundImage = `linear-gradient(135deg, ${hexLight}, ${hex})`;
+        el.style.backgroundSize = "cover";
+        el.style.backgroundPosition = "center";
+      });
+      return {
+        html: nextHtml,
+        css,
+        summary: `Added a ${intent.colorWord ? intent.colorWord + " " : ""}gradient background`,
+      };
+    }
+
     case "image_use": {
       // intent.asset is resolved upstream in engine.js's runLocalEngine,
       // which has access to project.assets — applyIntent itself stays

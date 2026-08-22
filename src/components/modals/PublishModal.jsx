@@ -9,14 +9,12 @@ import { downloadTextFile, buildStandaloneHtml } from "../../utils/download.js";
 const ERROR_COPY = {
   not_configured: "not_configured",
   fix_issues_first: "Fix the errors in the Issues tab before publishing.",
-  create_site_failed: "Netlify rejected the request to create a site.",
-  deploy_failed: "The deploy to Netlify failed.",
-  zip_failed: "Couldn't package the site for deploy. Try again.",
+  deploy_failed: "The deploy to Vercel failed.",
   network_error: "Couldn't reach the publish service — check your connection and try again.",
   request_failed: "The publish request failed. Try again.",
 };
 
-// Netlify's error `detail` is usually JSON like {"error": "..."} or
+// Vercel's error `detail` is usually JSON like {"error": "..."} or
 // {"message": "..."}, but can also be a raw string or HTML error page —
 // extract whatever's human-readable rather than dumping raw JSON/markup.
 function extractDetailMessage(detail) {
@@ -76,7 +74,7 @@ export default function PublishModal({ onClose }) {
         {status === "publishing" && (
           <div className="publish-modal__state">
             <Spinner size={20} />
-            <p>Preparing production build and deploying to Netlify…</p>
+            <p>Preparing production build and deploying to Vercel…</p>
           </div>
         )}
 
@@ -101,19 +99,19 @@ export default function PublishModal({ onClose }) {
 
         {status === "error" && (
           <div className="publish-modal__state publish-modal__state--error">
-            <p className="publish-modal__headline">⚠ {error === "not_configured" ? "Netlify isn't connected yet" : "Publish failed"}</p>
+            <p className="publish-modal__headline">⚠ {error === "not_configured" ? "Vercel isn't connected yet" : "Publish failed"}</p>
             {error === "not_configured" ? (
               <>
-                <p>Add a free Netlify personal access token to enable one-click deploys:</p>
+                <p>Add a free Vercel personal access token to enable one-click deploys:</p>
                 <ol className="publish-modal__steps">
                   <li>
-                    Create a token at <code>app.netlify.com/user/applications#personal-access-tokens</code>.
+                    Create a token at <code>vercel.com/account/tokens</code>.
                   </li>
                   <li>
                     Copy <code>.env.example</code> to <code>.env.local</code> in the project folder.
                   </li>
                   <li>
-                    Paste it as <code>NETLIFY_API_TOKEN=your_token</code> in <code>.env.local</code>.
+                    Paste it as <code>VERCEL_API_TOKEN=your_token</code> in <code>.env.local</code>.
                   </li>
                   <li>Restart the dev server so the token loads.</li>
                 </ol>
@@ -138,8 +136,8 @@ export default function PublishModal({ onClose }) {
         {status === "idle" && (
           <div className="publish-modal__state">
             <p>
-              Publishing validates your page and deploys it to Netlify as a live, shareable URL.
-              {!configured && " No Netlify token is configured yet, so this will show setup instructions instead."}
+              Publishing validates your page and deploys it to Vercel as a live, shareable URL.
+              {!configured && " No Vercel token is configured yet, so this will show setup instructions instead."}
             </p>
             <Button variant="primary" onClick={runPublish}>Publish</Button>
           </div>
